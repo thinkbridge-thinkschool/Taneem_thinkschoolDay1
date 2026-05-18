@@ -1,0 +1,5 @@
+In dotnet the Program.cs was compiled and converted into an executable file which was ran at console.
+While hello.ts was executed directly by nodejs
+In dotnet the code was structured and built in dependencies were used.
+while in typescript and node single file was enough to run the code directly.
+node and typescript are more easy to run while in dotnet program.cs is not that flexible.

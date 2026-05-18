@@ -1,0 +1,11 @@
+Three Bullets 
+
+1)Similarity : In Both .NET AND NODE, API endpoints were similar like GET all, POST, GET by ID and DELETE.
+The database access pattern is similar. In Dotnet its through EF core and in node it is done through SQLite calls.
+
+2)Differences: In dotnet most of the code was built in while in Node a lot of manual code was required. In dotnet everything was organized in clean and efficient way in layers while in node whole program was written in one page which created less flexibility but a lot of time. Also one more difference is that in dotnet the errors and exceptions are handled through middleware and in node it is handled through try and catch blocks.
+
+3)Easy to code : For me easy to code was dotnet because everything was layered and structured properly so that you can understand the bugs and debug it easily. while in node it was a bit confusing to handle the error. 
+
+Repo Link :
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1
