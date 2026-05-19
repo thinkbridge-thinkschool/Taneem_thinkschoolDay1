@@ -8,7 +8,7 @@ public static class ServiceExtensions
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration          configuration)
     {
         services.AddDbContext<AppDbContext>(options =>
         {
@@ -16,7 +16,8 @@ public static class ServiceExtensions
                 configuration.GetConnectionString("Default"));
         });
 
-        services.AddScoped<IQuoteRepository, QuoteRepository>();
+        services.AddScoped<IQuoteRepository,      QuoteRepository>();
+        services.AddScoped<ICollectionRepository, CollectionRepository>();  // ← new
 
         return services;
     }
