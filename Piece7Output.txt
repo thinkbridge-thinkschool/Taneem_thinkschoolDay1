@@ -1,0 +1,28 @@
+1) Create Collection
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> $file = "body.json"
+>> curl.exe -X POST http://localhost:5150/api/collections -H "Content-Type: application/json" -d "@$file"
+{"id":3,"name":"My Favourites","ownerId":1,"items":[]}
+
+2) Add Quote to Collection
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> '{"quoteId": 1}' | Out-File -FilePath item.json -Encoding utf8
+>> $file = "item.json"
+>> curl.exe -X POST http://localhost:5150/api/collections/1/items -H "Content-Type: application/json" -d "@$file"
+{"id":1,"name":"My Favourites","ownerId":1,"items":[{"quoteId":1,"addedAt":"2026-05-19T13:29:00.1718364+00:00"}]}
+
+3) Add Duplicate Quote to Collection
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> curl.exe -X POST http://localhost:5150/api/collections/1/items -H "Content-Type: application/json" -d "@$file"
+{"title":"Business rule violation.","status":422,"detail":"Quote 1 is already in collection 1."}
+
+4) Delete Quote
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> curl.exe -X DELETE http://localhost:5150/api/collections/1/items/1
+{"id":1,"name":"My Favourites","ownerId":1,"items":[]}
+
+5) Test Short name
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> '{"name": "Hi", "ownerId": 1}' | Out-File -FilePath short.json -Encoding utf8
+>> $file = "short.json"
+>> curl.exe -X POST http://localhost:5150/api/collections -H "Content-Type: application/json" -d "@$file"
+{"title":"Business rule violation.","status":422,"detail":"Collection name must be between 3 and 80 characters (got 2)."}
+
+6) Test Collection not found
+PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> $file = "item.json"
+>> curl.exe -X POST http://localhost:5150/api/collections/999/items -H "Content-Type: application/json" -d "@$file"
