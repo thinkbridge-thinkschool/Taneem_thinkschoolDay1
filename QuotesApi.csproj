@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Remove="tests\**" />
+    <Compile Remove="Tests.Domain\**" />
   </ItemGroup>
 
   <ItemGroup>
