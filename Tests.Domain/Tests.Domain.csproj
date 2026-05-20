@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)out</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
