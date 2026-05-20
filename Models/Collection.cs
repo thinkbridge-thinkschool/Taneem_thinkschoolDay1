@@ -1,3 +1,5 @@
+using QuotesApi.Services;
+
 namespace QuotesApi.Models;
 
 /// <summary>
@@ -42,16 +44,16 @@ public sealed class Collection
     /// Adds a quote to the collection.
     /// Throws if the collection is full or the quote is already present.
     /// </summary>
-    public void AddItem(int quoteId)
-    {
-        if (_items.Count >= 50)
-            throw new CollectionFullException(Id);
+   public void AddItem(int quoteId, IClock clock)
+{
+    if (_items.Count >= 50)
+        throw new CollectionFullException(Id);
 
-        if (_items.Any(i => i.QuoteId == quoteId))
-            throw new DuplicateQuoteException(Id, quoteId);
+    if (_items.Any(i => i.QuoteId == quoteId))
+        throw new DuplicateQuoteException(Id, quoteId);
 
-        _items.Add(CollectionItem.Create(quoteId));
-    }
+    _items.Add(CollectionItem.Create(quoteId, clock));
+}
 
     /// <summary>
     /// Removes a quote from the collection.
@@ -94,9 +96,9 @@ public sealed class CollectionItem
 
     private CollectionItem() { }   // required by EF
 
-    internal static CollectionItem Create(int quoteId) => new()
-    {
-        QuoteId = quoteId,
-        AddedAt = DateTimeOffset.UtcNow
-    };
+    internal static CollectionItem Create(int quoteId, IClock clock) => new()
+{
+    QuoteId = quoteId,
+    AddedAt = clock.UtcNow   // ← was DateTimeOffset.UtcNow
+};
 }
