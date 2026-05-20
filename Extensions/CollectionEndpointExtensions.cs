@@ -1,6 +1,7 @@
 using QuotesApi.DTOs;
 using QuotesApi.Models;
 using QuotesApi.Repositories;
+using QuotesApi.Services;
 
 namespace QuotesApi.Extensions;
 
@@ -45,23 +46,23 @@ public static class CollectionEndpointExtensions
         // Throws CollectionFullException or DuplicateQuoteException if invariants break.
 
         group.MapPost("/{id:int}/items", async (
-            int               id,
-            AddQuoteRequest   request,
-            ICollectionRepository repo,
-            CancellationToken ct) =>
-        {
-            var collection = await repo.GetByIdAsync(id, ct);
+    int                   id,
+    AddQuoteRequest       request,
+    ICollectionRepository repo,
+    IClock                clock,     // ← injected by DI
+    CancellationToken     ct) =>
+{
+    var collection = await repo.GetByIdAsync(id, ct);
 
-            if (collection is null)
-                return Results.NotFound();
+    if (collection is null)
+        return Results.NotFound();
 
-            // All invariant checks happen inside AddItem — not here, not in the repo.
-            collection.AddItem(request.QuoteId);
+    collection.AddItem(request.QuoteId, clock);   // ← clock passed in
 
-            await repo.UpdateAsync(collection, ct);
+    await repo.UpdateAsync(collection, ct);
 
-            return Results.Ok(ToResponse(collection));
-        });
+    return Results.Ok(ToResponse(collection));
+});
 
         // ── DELETE /api/collections/{id}/items/{quoteId} ──────────────────
         // Removes a quote from the collection through the aggregate root.
