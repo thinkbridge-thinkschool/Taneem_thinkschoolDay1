@@ -51,6 +51,17 @@ app.Use(async (context, next) =>
             detail = ex.Message
         });
     }
+    catch (QuoteDomainException ex)
+{
+    context.Response.StatusCode  = StatusCodes.Status422UnprocessableEntity;
+    context.Response.ContentType = "application/problem+json";
+    await context.Response.WriteAsJsonAsync(new
+    {
+        title  = "Business rule violation.",
+        status = 422,
+        detail = ex.Message
+    });
+}
 });
 
 using (var scope = app.Services.CreateScope())
