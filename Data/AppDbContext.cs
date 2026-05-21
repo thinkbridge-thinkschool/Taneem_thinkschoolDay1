@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Quote>      Quotes      => Set<Quote>();
     public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,5 +50,14 @@ public class AppDbContext : DbContext
                 item.HasKey("CollectionId", "QuoteId");
             });
         });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+{
+    entity.HasKey(r => r.Id);
+    entity.Property(r => r.Token).IsRequired();
+    entity.Property(r => r.Family).IsRequired();
+    entity.HasIndex(r => r.Token);   // fast lookup by token
+    entity.HasIndex(r => r.Family);  // fast lookup by family for reuse detection
+});
     }
 }
