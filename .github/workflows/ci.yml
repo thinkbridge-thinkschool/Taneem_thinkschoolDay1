@@ -19,4 +19,4 @@ jobs:
       - name: Build
         run: dotnet build QuotesApi.slnx --no-restore
       - name: Test
-        run: dotnet test QuotesApi.slnx --no-build --verbosity normal
+        run: dotnet test QuotesApi.slnx --no-build --verbosity normal --logger "console;verbosity=detailed"
