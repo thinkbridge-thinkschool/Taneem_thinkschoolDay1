@@ -1,0 +1,14 @@
+0000000000000000000000000000000000000000 f468ee0928f505f0bf259d60f946119f74041241 Taneem110 <sajjantaneem19@gmail.com> 1779184271 +0530	commit (initial): Add QuotesApi project
+f468ee0928f505f0bf259d60f946119f74041241 9622b2d5681a81d5378c79ae67254eddf9f1f1e4 Taneem110 <sajjantaneem19@gmail.com> 1779330972 +0530	checkout: moving from master to main
+9622b2d5681a81d5378c79ae67254eddf9f1f1e4 9622b2d5681a81d5378c79ae67254eddf9f1f1e4 Taneem110 <sajjantaneem19@gmail.com> 1779331091 +0530	reset: moving to HEAD
+9622b2d5681a81d5378c79ae67254eddf9f1f1e4 a07fb9621c35c83f70784fe3c332e1199b20a406 Taneem110 <sajjantaneem19@gmail.com> 1779331097 +0530	checkout: moving from main to feature/rich-quote-entity
+a07fb9621c35c83f70784fe3c332e1199b20a406 9622b2d5681a81d5378c79ae67254eddf9f1f1e4 Taneem110 <sajjantaneem19@gmail.com> 1779331614 +0530	checkout: moving from feature/rich-quote-entity to main
+9622b2d5681a81d5378c79ae67254eddf9f1f1e4 9622b2d5681a81d5378c79ae67254eddf9f1f1e4 Taneem110 <sajjantaneem19@gmail.com> 1779331804 +0530	reset: moving to HEAD
+9622b2d5681a81d5378c79ae67254eddf9f1f1e4 a07fb9621c35c83f70784fe3c332e1199b20a406 Taneem110 <sajjantaneem19@gmail.com> 1779331809 +0530	checkout: moving from main to feature/rich-quote-entity
+a07fb9621c35c83f70784fe3c332e1199b20a406 9622b2d5681a81d5378c79ae67254eddf9f1f1e4 Taneem110 <sajjantaneem19@gmail.com> 1779331962 +0530	checkout: moving from feature/rich-quote-entity to main
+9622b2d5681a81d5378c79ae67254eddf9f1f1e4 4322178408a2d4462070187d6334d58dc0ca8bea Taneem110 <sajjantaneem19@gmail.com> 1779333064 +0530	commit: Add Untracked Files
+4322178408a2d4462070187d6334d58dc0ca8bea 98bc1b792a77b5d12527f80d616258d265e2b7f1 Taneem110 <sajjantaneem19@gmail.com> 1779333172 +0530	checkout: moving from main to feature/collection-aggregate
+98bc1b792a77b5d12527f80d616258d265e2b7f1 98bc1b792a77b5d12527f80d616258d265e2b7f1 Taneem110 <sajjantaneem19@gmail.com> 1779333621 +0530	checkout: moving from feature/collection-aggregate to feature/collection-aggregate
+98bc1b792a77b5d12527f80d616258d265e2b7f1 9f9c18184f07131151aa34854afb39f0f202d66e Taneem110 <sajjantaneem19@gmail.com> 1779333804 +0530	commit: Added QuotesApi
+9f9c18184f07131151aa34854afb39f0f202d66e 4322178408a2d4462070187d6334d58dc0ca8bea Taneem110 <sajjantaneem19@gmail.com> 1779334109 +0530	checkout: moving from feature/collection-aggregate to main
+4322178408a2d4462070187d6334d58dc0ca8bea 9f9c18184f07131151aa34854afb39f0f202d66e Taneem110 <sajjantaneem19@gmail.com> 1779334299 +0530	checkout: moving from main to feature/collection-aggregate
