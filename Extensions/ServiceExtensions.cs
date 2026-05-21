@@ -1,4 +1,7 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using QuotesApi.Data;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
@@ -12,14 +15,29 @@ public static class ServiceExtensions
         IConfiguration          configuration)
     {
         services.AddDbContext<AppDbContext>(options =>
-        {
-            options.UseSqlite(
-                configuration.GetConnectionString("Default"));
-        });
+            options.UseSqlite(configuration.GetConnectionString("Default")));
 
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
-        services.AddScoped<ICollectionRepository, CollectionRepository>();// Singleton — stateless clock, safe to share across all requests
-        services.AddSingleton<IClock, SystemClock>();  // ← new
+        services.AddScoped<ICollectionRepository, CollectionRepository>();
+        services.AddSingleton<IClock, SystemClock>();
+
+        services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer           = false,
+                    ValidateAudience         = false,
+                    ValidateLifetime         = true,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey         = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!)),
+                    ClockSkew = TimeSpan.Zero
+                };
+            });
+
+        services.AddAuthorization();
 
         return services;
     }
