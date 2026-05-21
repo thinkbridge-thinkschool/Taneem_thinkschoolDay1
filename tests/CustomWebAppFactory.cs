@@ -48,8 +48,8 @@ builder.ConfigureServices(services =>
     // Disable Entra authority validation in tests
     services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>("Entra", options =>
     {
-        options.Authority            = null;
-        options.MetadataAddress      = null;
+        options.Authority            = string.Empty;
+options.MetadataAddress      = string.Empty;
         options.RequireHttpsMetadata = false;
         options.TokenValidationParameters.ValidateIssuer   = false;
         options.TokenValidationParameters.ValidateAudience = false;
