@@ -7,6 +7,9 @@ using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -43,18 +46,20 @@ app.Use(async (context, next) =>
     }
 });
 
-using (var scope = app.Services.CreateScope())
+// Skip DB setup when running integration tests
+if (!builder.Environment.IsEnvironment("Testing"))
 {
-    var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 
-    // Seed test user
     if (!db.Users.Any(u => u.Email == "test@example.com"))
     {
         db.Users.Add(new User
         {
             Email        = "test@example.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!")
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
+            Role         = "user"
         });
         db.SaveChanges();
     }

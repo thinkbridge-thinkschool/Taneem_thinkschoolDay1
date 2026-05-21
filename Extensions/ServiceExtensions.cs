@@ -18,8 +18,8 @@ public static class ServiceExtensions
         this IServiceCollection services,
         IConfiguration          configuration)
     {
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlite(configuration.GetConnectionString("Default")));
+       services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(configuration.GetConnectionString("Default")));
             services.AddHttpContextAccessor();
 
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
@@ -51,9 +51,10 @@ services.AddAuthorization(options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer           = false,
-                    ValidateAudience         = false,
-                    ValidateLifetime         = true,
+                    ValidateIssuer           = true,
+                    ValidIssuer             = "self",
+                    ValidateAudience        = false,
+                    ValidateLifetime        = true,
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey         = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!)),
@@ -85,8 +86,7 @@ services.AddAuthorization(options =>
             {
                 options.ForwardDefaultSelector = context =>
                 {
-                    var authHeader = context.Request.Headers["Authorization"]
-                        .FirstOrDefault();
+                    var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
 
                     if (authHeader is null || !authHeader.StartsWith("Bearer "))
                         return "Bearer";
@@ -97,18 +97,21 @@ services.AddAuthorization(options =>
                     {
                         var jwt    = new JwtSecurityToken(token);
                         var issuer = jwt.Issuer;
+                        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
 
-                        var logger = context.RequestServices
-                            .GetRequiredService<ILogger<Program>>();
+                        // Log the raw payload and claims for debugging
+                        logger.LogInformation("Token raw payload: {Payload}", jwt.Payload.SerializeToJson());
+                        logger.LogInformation("Token claims: {Claims}", string.Join(", ", jwt.Claims.Select(c => $"{c.Type}:{c.Value}")));
                         logger.LogInformation("Token issuer: {Issuer}", issuer);
 
-                        return issuer.Contains("microsoftonline.com") ||
-                               issuer.Contains("sts.windows.net")
+                        return issuer != null && (issuer.Contains("microsoftonline.com") || issuer.Contains("sts.windows.net"))
                             ? "Entra"
                             : "Bearer";
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                        logger.LogError(ex, "Error parsing JWT in Smart scheme selector");
                         return "Bearer";
                     }
                 };
