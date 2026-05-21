@@ -16,7 +16,13 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Restore
         run: dotnet restore QuotesApi.slnx
-      - name: Build
-        run: dotnet build QuotesApi.slnx --no-restore
-      - name: Test
-        run: dotnet test QuotesApi.slnx --no-build --verbosity normal --logger "console;verbosity=detailed"
+      - name: Build QuotesApi
+        run: dotnet build QuotesApi.csproj --no-restore
+      - name: Build tests
+        run: dotnet build tests/tests.csproj --no-restore
+      - name: Build Tests.Domain
+        run: dotnet build Tests.Domain/Tests.Domain.csproj --no-restore
+      - name: Run tests
+        run: |
+          dotnet test tests/tests.csproj --no-build --verbosity normal
+          dotnet test Tests.Domain/Tests.Domain.csproj --no-build --verbosity normal
