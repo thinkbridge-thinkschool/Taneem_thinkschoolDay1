@@ -148,6 +148,7 @@ public class AuthController : ControllerBase
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Email,          user.Email),
+                new Claim("role",                    user.Role),
                 new Claim("jti",                     Guid.NewGuid().ToString())
             }),
             Expires            = DateTime.UtcNow.AddMinutes(expiresInMin),

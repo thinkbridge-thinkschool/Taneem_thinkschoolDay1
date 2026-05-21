@@ -12,6 +12,7 @@ public sealed class Quote
     public string Author    { get; private set; } = string.Empty;
     public string Text      { get; private set; } = string.Empty;
     public bool   IsDeleted { get; private set; }
+    public int CreatedByUserId { get; private set; }
 
     // ── EF Core requires a parameterless constructor ───────────────────────
 
@@ -23,18 +24,17 @@ public sealed class Quote
     /// The only way to create a Quote. Enforces all invariants at construction.
     /// Throws QuoteDomainException if author or text violate the rules.
     /// </summary>
-    public static Quote Create(string author, string text)
+    public static Quote Create(string author, string text, int createdByUserId = 0)
+{
+    ValidateAuthor(author);
+    ValidateText(text);
+    return new Quote
     {
-        ValidateAuthor(author);
-        ValidateText(text);
-
-        return new Quote
-        {
-            Author    = author.Trim(),
-            Text      = text.Trim(),
-            IsDeleted = false
-        };
-    }
+        Author          = author.Trim(),
+        Text            = text.Trim(),
+        CreatedByUserId = createdByUserId
+    };
+}
 
     // ── Mutation ──────────────────────────────────────────────────────────
 

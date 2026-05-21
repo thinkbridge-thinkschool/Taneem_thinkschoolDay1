@@ -55,7 +55,7 @@ public static class EndpointExtensions
             return Results.Created(
                 $"/api/quotes/{created.Id}",
                 ToResponse(created));
-        }).RequireAuthorization();
+        }).RequireAuthorization("can-write-quotes");
 
         // ── DELETE /api/quotes/{id} ───────────────────────────────────────
         // Soft delete — quote is hidden, not removed from the database.
@@ -69,7 +69,7 @@ public static class EndpointExtensions
             return deleted
                 ? Results.NoContent()
                 : Results.NotFound();
-        }).RequireAuthorization();
+        }).RequireAuthorization("can-delete-quotes");
 
         return app;
     }

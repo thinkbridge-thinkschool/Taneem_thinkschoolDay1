@@ -1,11 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using QuotesApi.Authorization;
 using QuotesApi.Data;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
+
 
 namespace QuotesApi.Extensions;
 
@@ -17,11 +20,25 @@ public static class ServiceExtensions
     {
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(configuration.GetConnectionString("Default")));
+            services.AddHttpContextAccessor();
 
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
+        services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
 
+       services.AddHttpContextAccessor();
+services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
+
+services.AddAuthorization(options =>
+{
+    options.AddPolicy("can-write-quotes", p =>
+        p.RequireAuthenticatedUser());
+
+    options.AddPolicy("can-delete-quotes", p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new OwnQuoteRequirement()));
+});
         services
             .AddAuthentication(options =>
             {
