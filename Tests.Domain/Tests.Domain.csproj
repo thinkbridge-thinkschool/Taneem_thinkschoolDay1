@@ -1,12 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <BaseOutputPath>$(MSBuildThisFileDirectory)out</BaseOutputPath>
-  </PropertyGroup>
+  <TargetFramework>net10.0</TargetFramework>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
+  <IsPackable>false</IsPackable>
+  <BaseOutputPath>C:\Users\tanee\Desktop\thinkschool\day-1\TestsOutput\Tests.Domain</BaseOutputPath>
+  <EnableDefaultContentItems>false</EnableDefaultContentItems>
+</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
