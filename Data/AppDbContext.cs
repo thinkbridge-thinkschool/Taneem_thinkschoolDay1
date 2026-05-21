@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Quote>      Quotes      => Set<Quote>();
     public DbSet<Collection> Collections => Set<Collection>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

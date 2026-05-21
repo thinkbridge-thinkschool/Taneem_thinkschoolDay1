@@ -3,76 +3,67 @@ using QuotesApi.Data;
 using QuotesApi.Extensions;
 using QuotesApi.Middleware;
 using QuotesApi.Models;
+using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddInfrastructure(
-    builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddControllers();
 builder.Services.ConfigureHttpJsonOptions(options =>
-    {
-        options.SerializerOptions.PropertyNameCaseInsensitive = true;
-    });
+{
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
+});
 
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 
-// Map domain exceptions to HTTP status codes.
-// CollectionDomainException subtypes bubble up from the aggregate
-// through the endpoint and are caught here before ExceptionMiddleware
-// would turn them into 500s.
 app.Use(async (context, next) =>
 {
-    try
-    {
-        await next(context);
-    }
+    try { await next(context); }
     catch (CollectionNotFoundException ex)
     {
-        context.Response.StatusCode  = StatusCodes.Status404NotFound;
+        context.Response.StatusCode  = 404;
         context.Response.ContentType = "application/problem+json";
-        await context.Response.WriteAsJsonAsync(new
-        {
-            title  = "Not found.",
-            status = 404,
-            detail = ex.Message
-        });
+        await context.Response.WriteAsJsonAsync(new { title = "Not found.", status = 404, detail = ex.Message });
     }
     catch (CollectionDomainException ex)
     {
-        // Name invalid, collection full, duplicate quote, quote not in collection
-        // — all are client errors (422).
-        context.Response.StatusCode  = StatusCodes.Status422UnprocessableEntity;
+        context.Response.StatusCode  = 422;
         context.Response.ContentType = "application/problem+json";
-        await context.Response.WriteAsJsonAsync(new
-        {
-            title  = "Business rule violation.",
-            status = 422,
-            detail = ex.Message
-        });
+        await context.Response.WriteAsJsonAsync(new { title = "Business rule violation.", status = 422, detail = ex.Message });
     }
     catch (QuoteDomainException ex)
-{
-    context.Response.StatusCode  = StatusCodes.Status422UnprocessableEntity;
-    context.Response.ContentType = "application/problem+json";
-    await context.Response.WriteAsJsonAsync(new
     {
-        title  = "Business rule violation.",
-        status = 422,
-        detail = ex.Message
-    });
-}
+        context.Response.StatusCode  = 422;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new { title = "Business rule violation.", status = 422, detail = ex.Message });
+    }
 });
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider
-        .GetRequiredService<AppDbContext>();
-
+    var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // Seed test user
+    if (!db.Users.Any(u => u.Email == "test@example.com"))
+    {
+        db.Users.Add(new User
+        {
+            Email        = "test@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!")
+        });
+        db.SaveChanges();
+    }
 }
 
+app.MapControllers();
 app.MapQuoteEndpoints();
-app.MapCollectionEndpoints();   // ← new
+app.MapCollectionEndpoints();
 
 app.Run();
+
+public partial class Program { }
