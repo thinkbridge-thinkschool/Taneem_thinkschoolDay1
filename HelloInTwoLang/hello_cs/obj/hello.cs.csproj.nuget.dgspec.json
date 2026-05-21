@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj": {}
+    "c:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj": {}
   },
   "projects": {
-    "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj": {
+    "c:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj",
+        "projectUniqueName": "c:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj",
         "projectName": "hello.cs",
-        "projectPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj",
+        "projectPath": "c:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\hello.cs.csproj",
         "packagesPath": "C:\\Users\\tanee\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\obj\\",
+        "outputPath": "c:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\HelloInTwoLang\\hello_cs\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\tanee\\AppData\\Roaming\\NuGet\\NuGet.Config"

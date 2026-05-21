@@ -2444,11 +2444,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\QuotesApi.csproj",
+      "projectUniqueName": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\QuotesApi\\QuotesApi.csproj",
       "projectName": "QuotesApi",
-      "projectPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\QuotesApi.csproj",
+      "projectPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\QuotesApi\\QuotesApi.csproj",
       "packagesPath": "C:\\Users\\tanee\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\obj\\",
+      "outputPath": "C:\\Users\\tanee\\Desktop\\thinkschool\\day-1\\QuotesApi\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\tanee\\AppData\\Roaming\\NuGet\\NuGet.Config"
