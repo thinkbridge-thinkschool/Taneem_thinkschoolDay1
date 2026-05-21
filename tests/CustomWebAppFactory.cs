@@ -17,16 +17,18 @@ public class CustomWebAppFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
 
         builder.ConfigureAppConfiguration((context, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"]              = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                ["Jwt:ExpiresInMinutes"] = "60",
-                ["Entra:TenantId"]       = "test-tenant",
-                ["Entra:ClientId"]       = "test-client",
-                ["Entra:Audience"]       = "api://test-client"
-            });
-        });
+{
+    // Clear existing sources and re-add with our test values last (highest priority)
+    config.AddJsonFile("appsettings.json", optional: true);
+    config.AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["Jwt:Key"]              = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ["Jwt:ExpiresInMinutes"] = "60",
+        ["Entra:TenantId"]       = "test-tenant",
+        ["Entra:ClientId"]       = "test-client",
+        ["Entra:Audience"]       = "api://test-client"
+    });
+});
 builder.ConfigureServices(services =>
 {
     // Remove ALL EF related
