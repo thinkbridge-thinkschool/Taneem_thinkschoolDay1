@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <BaseOutputPath>C:\Users\tanee\Desktop\thinkschool\day-1\TestsOutput\Tests.Domain</BaseOutputPath>
+<EnableDefaultContentItems>false</EnableDefaultContentItems>
   </PropertyGroup>
 
   <ItemGroup>
