@@ -1,0 +1,8 @@
+TestsOutput/
+C:\TestsOut\
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+token.txt
