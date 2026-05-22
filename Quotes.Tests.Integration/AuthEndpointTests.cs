@@ -5,9 +5,15 @@ using System.Text.Json;
 
 namespace Quotes.Tests.Integration;
 
+[Collection("Integration")]
 public sealed class AuthEndpointTests : IDisposable
 {
-    private readonly QuotesIntegrationFactory _factory = new();
+    private readonly QuotesIntegrationFactory _factory;
+
+    public AuthEndpointTests(SqlServerFixture fixture)
+    {
+        _factory = new QuotesIntegrationFactory(fixture.ConnectionString);
+    }
 
     public void Dispose() => _factory.Dispose();
 

@@ -40,8 +40,13 @@ public class AppDbContext : DbContext
             {
                 item.WithOwner().HasForeignKey("CollectionId");
 
+                // SQL Server applies IDENTITY to int PK columns by convention.
+                // Both columns are set explicitly — never auto-generated.
+                item.Property<int>("CollectionId").ValueGeneratedNever();
+
                 item.Property(i => i.QuoteId)
-                    .IsRequired();
+                    .IsRequired()
+                    .ValueGeneratedNever();
 
                 item.Property(i => i.AddedAt)
                     .IsRequired();

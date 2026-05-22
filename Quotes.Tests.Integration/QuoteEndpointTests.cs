@@ -8,9 +8,15 @@ namespace Quotes.Tests.Integration;
 // Each instance creates a new QuotesIntegrationFactory with a unique GUID DB name.
 // Result: every test gets a completely empty, isolated in-memory database.
 
+[Collection("Integration")]
 public sealed class QuoteEndpointTests : IDisposable
 {
-    private readonly QuotesIntegrationFactory _factory = new();
+    private readonly QuotesIntegrationFactory _factory;
+
+    public QuoteEndpointTests(SqlServerFixture fixture)
+    {
+        _factory = new QuotesIntegrationFactory(fixture.ConnectionString);
+    }
 
     public void Dispose() => _factory.Dispose();
 

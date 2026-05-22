@@ -4,9 +4,15 @@ using System.Text.Json;
 
 namespace Quotes.Tests.Integration;
 
+[Collection("Integration")]
 public sealed class CollectionEndpointTests : IDisposable
 {
-    private readonly QuotesIntegrationFactory _factory = new();
+    private readonly QuotesIntegrationFactory _factory;
+
+    public CollectionEndpointTests(SqlServerFixture fixture)
+    {
+        _factory = new QuotesIntegrationFactory(fixture.ConnectionString);
+    }
 
     public void Dispose() => _factory.Dispose();
 
@@ -98,8 +104,9 @@ public sealed class CollectionEndpointTests : IDisposable
             new { quoteId = 42 });   // quoteId doesn't need to exist — endpoint stores it as-is
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var updated = await response.Content.ReadFromJsonAsync<CollectionResponse>(JsonOpts);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, because: body);
+        var updated = JsonSerializer.Deserialize<CollectionResponse>(body, JsonOpts);
         updated!.Items.Should().ContainSingle(i => i.QuoteId == 42);
     }
 
@@ -126,8 +133,9 @@ public sealed class CollectionEndpointTests : IDisposable
             new { quoteId = 7 });
 
         // Assert — AddedAt must equal the FakeClock value, not DateTime.UtcNow
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var updated = await response.Content.ReadFromJsonAsync<CollectionResponse>(JsonOpts);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, because: body);
+        var updated = JsonSerializer.Deserialize<CollectionResponse>(body, JsonOpts);
         updated!.Items[0].AddedAt.Should().Be(expectedTime,
             because: "the endpoint injects IClock; we replaced it with FakeClock");
     }

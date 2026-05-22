@@ -35,7 +35,7 @@ public class ExceptionMiddleware
             {
                 title = "Server Error",
                 status = 500,
-                detail = ex.Message
+                detail = ex.InnerException?.Message ?? ex.Message
             };
 
             await context.Response.WriteAsync(

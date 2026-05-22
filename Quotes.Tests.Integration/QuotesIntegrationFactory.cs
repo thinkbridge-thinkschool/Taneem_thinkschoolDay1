@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,8 +33,16 @@ public sealed class FakeClock : IClock
 
 public sealed class QuotesIntegrationFactory : WebApplicationFactory<Program>
 {
-    // Unique in-memory DB per factory instance = isolated DB per test
-    private readonly string _dbName = Guid.NewGuid().ToString();
+    // Unique SQL Server database per factory instance = isolated DB per test
+    private readonly string _connectionString;
+
+    public QuotesIntegrationFactory(string baseConnectionString)
+    {
+        // Each factory gets its own database on the shared container → full isolation
+        var csb = new SqlConnectionStringBuilder(baseConnectionString);
+        csb.InitialCatalog = $"testdb_{Guid.NewGuid():N}";
+        _connectionString = csb.ConnectionString;
+    }
 
     // Must match the key used to sign tokens in AuthController (hex → bytes)
     public const string JwtKey =
@@ -77,7 +86,7 @@ public sealed class QuotesIntegrationFactory : WebApplicationFactory<Program>
                 services.Remove(d);
 
             services.AddDbContext<AppDbContext>(opts =>
-                opts.UseInMemoryDatabase(_dbName));
+                opts.UseSqlServer(_connectionString));
 
             // ── Swap SystemClock for FakeClock ────────────────────────────
             var clockDesc = services.SingleOrDefault(d => d.ServiceType == typeof(IClock));

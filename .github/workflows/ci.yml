@@ -22,7 +22,10 @@ jobs:
         run: dotnet build tests/tests.csproj --no-restore
       - name: Build Tests.Domain
         run: dotnet build Tests.Domain/Tests.Domain.csproj --no-restore
+      - name: Build integration tests
+        run: dotnet build Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-restore
       - name: Run tests
         run: |
           dotnet test tests/tests.csproj --no-build --verbosity normal
           dotnet test Tests.Domain/Tests.Domain.csproj --no-build --verbosity normal
+          dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build --verbosity normal
