@@ -9,25 +9,69 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
       - name: Restore
-        run: dotnet restore QuotesApi.slnx
-      - name: Build QuotesApi
-        run: dotnet build QuotesApi.csproj --no-restore
-      - name: Build tests
-        run: dotnet build tests/tests.csproj --no-restore
-      - name: Build Tests.Domain
-        run: dotnet build Tests.Domain/Tests.Domain.csproj --no-restore
-      - name: Restore integration tests
-        run: dotnet restore Quotes.Tests.Integration/Quotes.Tests.Integration.csproj
-      - name: Build integration tests
-        run: dotnet build Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-restore
-      - name: Run tests
         run: |
-          dotnet test tests/tests.csproj --no-build --verbosity normal
-          dotnet test Tests.Domain/Tests.Domain.csproj --no-build --verbosity normal
-          dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build --verbosity normal
+          dotnet restore QuotesApi.slnx
+          dotnet restore Quotes.Tests.Integration/Quotes.Tests.Integration.csproj
+
+      - name: Build
+        run: |
+          dotnet build QuotesApi.csproj --no-restore
+          dotnet build tests/tests.csproj --no-restore
+          dotnet build Tests.Domain/Tests.Domain.csproj --no-restore
+          dotnet build Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-restore
+
+      - name: Test
+        run: |
+          dotnet test tests/tests.csproj --no-build \
+            --logger "trx;LogFileName=tests.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./test-results
+          dotnet test Tests.Domain/Tests.Domain.csproj --no-build \
+            --logger "trx;LogFileName=domain.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./test-results
+          dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build \
+            --logger "trx;LogFileName=integration.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./test-results
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./test-results/**/*.trx
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: ./test-results/**/coverage.cobertura.xml
+
+      - name: Check coverage >= 70%
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:"./test-results/**/coverage.cobertura.xml" \
+            -targetdir:"./coverage-summary" \
+            -reporttypes:"Cobertura"
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('./coverage-summary/Cobertura.xml')
+          rate = float(tree.getroot().get('line-rate'))
+          pct = round(rate * 100, 1)
+          print(f'Line coverage: {pct}%')
+          if rate < 0.70:
+              raise SystemExit(f'FAILED: coverage {pct}% is below the 70% threshold')
+          print('Coverage check passed.')
+          "
