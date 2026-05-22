@@ -170,6 +170,32 @@ public sealed class QuotesIntegrationFactory : WebApplicationFactory<Program>
         return quote.Id;
     }
 
+    // Revokes all refresh tokens for a user — used to test the IsActive=false branch
+    public async Task RevokeAllTokensForUserAsync(int userId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tokens = await db.RefreshTokens
+            .Where(t => t.UserId == userId)
+            .ToListAsync();
+        foreach (var t in tokens)
+            t.RevokedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    // Deletes a user — used to test the "orphaned refresh token" branch in Refresh
+    public async Task DeleteUserAsync(int userId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.FindAsync(userId);
+        if (user is not null)
+        {
+            db.Users.Remove(user);
+            await db.SaveChangesAsync();
+        }
+    }
+
     // Calls the real login endpoint and returns the access token
     public async Task<string> LoginAsync(
         string email    = "user@test.com",

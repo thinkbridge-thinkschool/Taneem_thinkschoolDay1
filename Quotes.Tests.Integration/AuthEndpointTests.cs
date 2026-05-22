@@ -123,7 +123,143 @@ public sealed class AuthEndpointTests : IDisposable
         secondRefresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task Login_UnknownEmail_Returns401()
+    {
+        // Arrange — no user seeded with this email
+        _factory.EnsureDbCreated();
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email    = "nobody@nowhere.com",
+            password = "Password123!",
+        });
+
+        // Assert — user is null branch in AuthController.Login
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_UnknownToken_Returns401()
+    {
+        // Arrange — no token seeded
+        _factory.EnsureDbCreated();
+        var client = _factory.CreateClient();
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            refreshToken = "this-token-does-not-exist-in-db",
+        });
+
+        // Assert — existing is null branch in AuthController.Refresh
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_OrphanedToken_Returns401()
+    {
+        // Arrange — login to get a refresh token, then delete the user
+        var userId = _factory.SeedUser();
+        var client = _factory.CreateClient();
+
+        var loginResp = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email    = "user@test.com",
+            password = "Password123!",
+        });
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOpts);
+
+        await _factory.DeleteUserAsync(userId);
+
+        // Act — token exists and is active, but the user row is gone
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            refreshToken = login!.RefreshToken,
+        });
+
+        // Assert — user is null branch in AuthController.Refresh
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Refresh_RevokedToken_Returns401()
+    {
+        // Arrange — login, then revoke the token directly in DB
+        var userId = _factory.SeedUser();
+        var client = _factory.CreateClient();
+
+        var loginResp = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email    = "user@test.com",
+            password = "Password123!",
+        });
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOpts);
+
+        await _factory.RevokeAllTokensForUserAsync(userId);
+
+        // Act — try to use the revoked token
+        var response = await client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            refreshToken = login!.RefreshToken,
+        });
+
+        // Assert — !existing.IsActive branch (IsRevoked = true)
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     // ── POST /api/auth/logout ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Logout_UnknownToken_Returns204()
+    {
+        // Arrange — token that was never issued
+        _factory.EnsureDbCreated();
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await _factory.LoginAsync());
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/auth/logout", new
+        {
+            refreshToken = "token-that-does-not-exist",
+        });
+
+        // Assert — existing is null path: logout is idempotent, still 204
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Logout_AlreadyRevokedToken_Returns204()
+    {
+        // Arrange — login, logout once, logout again with the same token
+        _factory.SeedUser();
+        var client = _factory.CreateClient();
+
+        var loginResp = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email    = "user@test.com",
+            password = "Password123!",
+        });
+        var login = await loginResp.Content.ReadFromJsonAsync<LoginResponse>(JsonOpts);
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login!.AccessToken);
+
+        // First logout — revokes the token
+        await client.PostAsJsonAsync("/api/auth/logout", new { refreshToken = login.RefreshToken });
+
+        // Act — second logout with the already-revoked token
+        var response = await client.PostAsJsonAsync("/api/auth/logout", new
+        {
+            refreshToken = login.RefreshToken,
+        });
+
+        // Assert — existing.IsActive is false path: still 204
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
 
     [Fact]
     public async Task Logout_WithValidToken_Returns204()
