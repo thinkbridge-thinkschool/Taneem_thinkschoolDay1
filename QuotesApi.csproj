@@ -3,19 +3,37 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="tests\**" />
     <Compile Remove="Tests.Domain\**" />
     <Compile Remove="Quotes.Tests.Unit\**" />
+    <Compile Remove="Quotes.Tests.Integration\**" />
     <Compile Remove="QuotesApi\**" />
     <Compile Remove="HelloInTwoLang\**" />
+    <Compile Remove="tests\**" />
+    <Compile Remove="Tests.Domain\**" />
+    <Compile Remove="Quotes.Tests.Unit\**" />
+    <Compile Remove="Quotes.Tests.Integration\**" />
     <Content Remove="QuotesApi\**" />
     <Content Remove="HelloInTwoLang\**" />
+    <Content Remove="tests\**" />
+    <Content Remove="Tests.Domain\**" />
+    <Content Remove="Quotes.Tests.Unit\**" />
+    <Content Remove="Quotes.Tests.Integration\**" />
     <None Remove="QuotesApi\**" />
     <None Remove="HelloInTwoLang\**" />
+    <None Remove="tests\**" />
+    <None Remove="Tests.Domain\**" />
+    <None Remove="Quotes.Tests.Unit\**" />
+    <None Remove="Quotes.Tests.Integration\**" />
     <EmbeddedResource Remove="QuotesApi\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <EmbeddedResource Remove="Tests.Domain\**" />
+    <EmbeddedResource Remove="Quotes.Tests.Unit\**" />
+    <EmbeddedResource Remove="Quotes.Tests.Integration\**" />
   </ItemGroup>
 
   <ItemGroup>

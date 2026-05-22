@@ -39,30 +39,30 @@ public static class CollectionEndpointExtensions
             return Results.Created(
                 $"/api/collections/{created.Id}",
                 ToResponse(created));
-        });
+        }).RequireAuthorization("can-write-quotes");
 
         // ── POST /api/collections/{id}/items ──────────────────────────────
         // Adds a quote to the collection through the aggregate root.
         // Throws CollectionFullException or DuplicateQuoteException if invariants break.
 
         group.MapPost("/{id:int}/items", async (
-    int                   id,
-    AddQuoteRequest       request,
-    ICollectionRepository repo,
-    IClock                clock,     // ← injected by DI
-    CancellationToken     ct) =>
-{
-    var collection = await repo.GetByIdAsync(id, ct);
+            int                   id,
+            AddQuoteRequest       request,
+            ICollectionRepository repo,
+            IClock                clock,     // ← injected by DI
+            CancellationToken     ct) =>
+        {
+            var collection = await repo.GetByIdAsync(id, ct);
 
-    if (collection is null)
-        return Results.NotFound();
+            if (collection is null)
+                return Results.NotFound();
 
-    collection.AddItem(request.QuoteId, clock);   // ← clock passed in
+            collection.AddItem(request.QuoteId, clock);   // ← clock passed in
 
-    await repo.UpdateAsync(collection, ct);
+            await repo.UpdateAsync(collection, ct);
 
-    return Results.Ok(ToResponse(collection));
-});
+            return Results.Ok(ToResponse(collection));
+        }).RequireAuthorization("can-write-quotes");
 
         // ── DELETE /api/collections/{id}/items/{quoteId} ──────────────────
         // Removes a quote from the collection through the aggregate root.
@@ -84,7 +84,7 @@ public static class CollectionEndpointExtensions
             await repo.UpdateAsync(collection, ct);
 
             return Results.Ok(ToResponse(collection));
-        });
+        }).RequireAuthorization("can-delete-quotes");
 
         return app;
     }

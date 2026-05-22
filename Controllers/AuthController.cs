@@ -154,7 +154,8 @@ public class AuthController : ControllerBase
             Expires            = DateTime.UtcNow.AddMinutes(expiresInMin),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature)
+                SecurityAlgorithms.HmacSha256Signature),
+            Issuer = "self"
         };
 
         return handler.WriteToken(handler.CreateToken(descriptor));

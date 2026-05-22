@@ -7,9 +7,6 @@ using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
-
-
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.ConfigureHttpJsonOptions(options =>
