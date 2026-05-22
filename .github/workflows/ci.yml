@@ -36,18 +36,22 @@ jobs:
           dotnet test tests/tests.csproj --no-build \
             --logger "trx;LogFileName=tests.trx" \
             --collect:"XPlat Code Coverage" \
+            --settings coverlet.runsettings \
             --results-directory ./test-results
           dotnet test Tests.Domain/Tests.Domain.csproj --no-build \
             --logger "trx;LogFileName=domain.trx" \
             --collect:"XPlat Code Coverage" \
+            --settings coverlet.runsettings \
             --results-directory ./test-results
           dotnet test Quotes.Tests.Unit/Quotes.Tests.Unit.csproj --no-build \
             --logger "trx;LogFileName=unit.trx" \
             --collect:"XPlat Code Coverage" \
+            --settings coverlet.runsettings \
             --results-directory ./test-results
           dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build \
             --logger "trx;LogFileName=integration.trx" \
             --collect:"XPlat Code Coverage" \
+            --settings coverlet.runsettings \
             --results-directory ./test-results
 
       - name: Upload test results
