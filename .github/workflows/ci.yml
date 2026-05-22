@@ -22,6 +22,8 @@ jobs:
         run: dotnet build tests/tests.csproj --no-restore
       - name: Build Tests.Domain
         run: dotnet build Tests.Domain/Tests.Domain.csproj --no-restore
+      - name: Restore integration tests
+        run: dotnet restore Quotes.Tests.Integration/Quotes.Tests.Integration.csproj
       - name: Build integration tests
         run: dotnet build Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-restore
       - name: Run tests
