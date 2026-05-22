@@ -2,6 +2,7 @@ TestsOutput/
 C:\TestsOut\
 bin/
 obj/
+out/
 *.db
 *.db-shm
 *.db-wal
