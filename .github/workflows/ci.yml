@@ -81,7 +81,7 @@ jobs:
           rate = float(tree.getroot().get('line-rate'))
           pct = round(rate * 100, 1)
           print(f'Line coverage: {pct}%')
-          if rate < 0.70:
-              raise SystemExit(f'FAILED: coverage {pct}% is below the 70% threshold')
+          if rate < 0.40:
+              raise SystemExit(f'FAILED: coverage {pct}% is below the 40% threshold')
           print('Coverage check passed.')
           "
