@@ -215,8 +215,8 @@ public sealed class AuthEndpointTests : IDisposable
     [Fact]
     public async Task Logout_UnknownToken_Returns204()
     {
-        // Arrange — token that was never issued
-        _factory.EnsureDbCreated();
+        // Arrange — seed a user so LoginAsync succeeds, but send a token that was never issued
+        _factory.SeedUser();
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", await _factory.LoginAsync());
