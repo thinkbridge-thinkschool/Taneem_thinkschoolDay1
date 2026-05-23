@@ -86,6 +86,27 @@ if (!builder.Environment.IsEnvironment("Testing"))
         });
         db.SaveChanges();
     }
+
+    if (!db.Quotes.Any())
+    {
+        var seedUser = db.Users.First(u => u.Email == "test@example.com");
+        var seedQuotes = new[]
+        {
+            "The only way to do great work is to love what you do.",
+            "In the middle of every difficulty lies opportunity.",
+            "It does not matter how slowly you go as long as you do not stop.",
+            "Life is what happens when you're busy making other plans.",
+            "The future belongs to those who believe in the beauty of their dreams.",
+            "It is during our darkest moments that we must focus to see the light.",
+            "The best time to plant a tree was 20 years ago.",
+            "An unexamined life is not worth living.",
+            "Spread love everywhere you go.",
+            "When you reach the end of your rope, tie a knot in it and hang on.",
+        };
+        foreach (var text in seedQuotes)
+            db.Quotes.Add(Quote.Create("Seed", text, seedUser.Id));
+        db.SaveChanges();
+    }
 }
 
 app.MapControllers();

@@ -30,7 +30,7 @@ public class QuoteRepository : IQuoteRepository
         _logger.LogInformation("Fetching quotes page {Page} size {Size}", page, size);
 
         return await _db.Quotes
-            .Where(q => !q.IsDeleted)          // ← filter soft-deleted
+            .Where(q => !q.IsDeleted)
             .OrderBy(q => q.Id)
             .Skip((page - 1) * size)
             .Take(size)
