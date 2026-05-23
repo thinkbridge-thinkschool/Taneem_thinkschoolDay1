@@ -3,6 +3,7 @@ using QuotesApi.Data;
 using QuotesApi.Extensions;
 using QuotesApi.Middleware;
 using QuotesApi.Models;
+using QuotesApi.Services;
 using BCrypt.Net;
 using System.Diagnostics;
 using Azure.Identity;
@@ -110,6 +111,12 @@ if (!builder.Environment.IsEnvironment("Testing"))
 }
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/api/quotes/external", async (IExternalQuoteService svc, CancellationToken ct) =>
+{
+    var quote = await svc.GetRandomQuoteAsync(ct);
+    return Results.Ok(quote);
+});
 
 app.MapControllers();
 app.MapQuoteEndpoints();

@@ -1,14 +1,17 @@
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Text;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Polly;
 using QuotesApi.Authorization;
 using QuotesApi.Data;
 using QuotesApi.Options;
@@ -49,6 +52,51 @@ public static class ServiceExtensions
         if (!string.IsNullOrEmpty(appInsightsConnStr))
             otelBuilder.UseAzureMonitor(o => o.ConnectionString = appInsightsConnStr);
         services.AddHttpContextAccessor();
+
+        var externalQuotesBaseUrl = configuration["ExternalQuotes:BaseUrl"] ?? "https://zenquotes.io";
+        services.AddHttpClient("external-quotes", c =>
+        {
+            c.BaseAddress = new Uri(externalQuotesBaseUrl);
+            c.Timeout     = Timeout.InfiniteTimeSpan; // resilience pipeline controls timeout
+        })
+        .AddResilienceHandler("default", (builder, context) =>
+        {
+            var logger = context.ServiceProvider.GetRequiredService<ILogger<ExternalQuoteService>>();
+
+            builder.AddRetry(new HttpRetryStrategyOptions
+            {
+                MaxRetryAttempts = 3,
+                BackoffType      = DelayBackoffType.Exponential,
+                UseJitter        = true,
+                OnRetry          = args =>
+                {
+                    logger.LogWarning(
+                        "Retry {Attempt} after {Delay}ms — {Outcome}",
+                        args.AttemptNumber + 1,
+                        args.RetryDelay.TotalMilliseconds,
+                        args.Outcome.Exception?.Message ?? args.Outcome.Result?.StatusCode.ToString());
+                    return ValueTask.CompletedTask;
+                }
+            });
+
+            builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+            {
+                SamplingDuration        = TimeSpan.FromSeconds(30),
+                FailureRatio            = 0.5,
+                MinimumThroughput       = 3,
+                BreakDuration           = TimeSpan.FromSeconds(15),
+                OnOpened = args =>
+                {
+                    logger.LogError("Circuit breaker opened for {Duration}s", args.BreakDuration.TotalSeconds);
+                    return ValueTask.CompletedTask;
+                }
+            });
+
+            builder.AddTimeout(TimeSpan.FromSeconds(10));
+        });
+
+        services.AddScoped<IExternalQuoteService, ExternalQuoteService>();
+
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
