@@ -4,8 +4,13 @@ using QuotesApi.Extensions;
 using QuotesApi.Middleware;
 using QuotesApi.Models;
 using BCrypt.Net;
+using Serilog;
+using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((ctx, cfg) =>
+    cfg.ReadFrom.Configuration(ctx.Configuration));
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
@@ -15,6 +20,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+
+// Stamp every log line in this request with the same TraceId
+app.Use((ctx, next) =>
+{
+    using (LogContext.PushProperty("TraceId", ctx.TraceIdentifier))
+        return next(ctx);
+});
 
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
