@@ -1,0 +1,125 @@
+1) Claim Based Policy:
+//Definition ServiceExtentions.cs
+options.AddPolicy("can-write-quotes", p =>
+    p.RequireAuthenticatedUser());
+
+//Applied in QuoteEndpointExtension.cs
+group.MapPost("/", async (...) =>
+{
+    ...
+}).RequireAuthorization("can-write-quotes");
+
+2) Custom Requirement/Authorizatiion Requirement
+using Microsoft.AspNetCore.Authorization;
+using QuotesApi.Data;
+using System.Security.Claims;
+
+namespace QuotesApi.Authorization;
+
+// ── Requirement ───────────────────────────────────────────────────────────
+// Marker — no properties needed. The handler does all the work.
+public class OwnQuoteRequirement : IAuthorizationRequirement { }
+
+// ── Handler ───────────────────────────────────────────────────────────────
+// Checks if the current user owns the quote they're trying to delete.
+// Admins can delete any quote.
+public class OwnQuoteHandler : AuthorizationHandler<OwnQuoteRequirement>
+{
+    private readonly IHttpContextAccessor _http;
+    private readonly AppDbContext         _db;
+
+    public OwnQuoteHandler(IHttpContextAccessor http, AppDbContext db)
+    {
+        _http = http;
+        _db   = db;
+    }
+
+    protected override async Task HandleRequirementAsync(
+        AuthorizationHandlerContext context,
+        OwnQuoteRequirement         requirement)
+    {
+        var httpContext = _http.HttpContext;
+        if (httpContext is null)
+        {
+            context.Fail();
+            return;
+        }
+
+        // Admins can delete anything
+        if (context.User.HasClaim("role", "admin"))
+        {
+            context.Succeed(requirement);
+            return;
+        }
+
+        // Get the quote id from the route
+        if (!httpContext.Request.RouteValues.TryGetValue("id", out var idValue)
+            || !int.TryParse(idValue?.ToString(), out var quoteId))
+        {
+            context.Fail();
+            return;
+        }
+
+        // Get the current user's id from the token
+        var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        {
+            context.Fail();
+            return;
+        }
+
+        // Check the quote exists and belongs to this user
+        var quote = await _db.Quotes.FindAsync(quoteId);
+        if (quote is null)
+        {
+            context.Fail();
+            return;
+        }
+
+        if (quote.CreatedByUserId == userId)
+            context.Succeed(requirement);
+        else
+            context.Fail();
+    }
+}
+
+// Definition in ServiceExtension.cs
+options.AddPolicy("can-delete-quotes", p =>
+    p.RequireAuthenticatedUser()
+     .AddRequirements(new OwnQuoteRequirement()));
+
+// Applied in QuoteEndpointExtension.cs 
+group.MapDelete("/{id:int}", async (...) =>
+{
+    ...
+}).RequireAuthorization("can-delete-quotes");
+
+3) Tests showing 403 when the policy fails:
+PS C:\Users\tanee\Desktop\thinkschool\day-1> curl.exe -s -w "\nStatus: %{http_code}\n" -X DELETE http://localhost:5150/api/quotes/1 -H "Authorization: Bearer $token"
+
+Status: 403
+
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X DELETE http://localhost:5150/api/quotes/10 -H "Authorization: Bearer $token1"
+
+Status: 403
+
+//Login with user 1
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $body = '{"email": "test@example.com", "password": "Password123!"}'
+>> $body | Out-File login.json -Encoding utf8 -NoNewline
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/auth/login -H "Content-Type: application/json" -d "@login.json"
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IiIsImp0aSI6ImNjOWIxNGIxLTg4NDItNDE3OC1iYjRlLTczNDJlMGYzMDhmMiIsIm5iZiI6MTc3OTM2MDk2MiwiZXhwIjoxNzc5MzYxODYyLCJpYXQiOjE3NzkzNjA5NjJ9.RpQGbYn18EvHy-Sif-g9YbJ_4D8mwzjI7AtrJRg5Rcw","refresh_token":"C5MLkvOQGRArk+wl51/LCUwcjVoFyejGBDwzsqxN78MPzD9P29+ZveN9f0Wb5MDtaBwTKtJywbCxFz3Lm47Q2g==","expires_in":900}
+Status: 200
+
+// Login with user 2
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IiIsImp0aSI6ImNjOWIxNGIxLTg4NDItNDE3OC1iYjRlLTczNDJlMGYzMDhmMiIsIm5iZiI6MTc3OTM2MDk2MiwiZXhwIjoxNzc5MzYxODYyLCJpYXQiOjE3NzkzNjA5NjJ9.RpQGbYn18EvHy-Sif-g9YbJ_4D8mwzjI7AtrJRg5Rcw"
+>> $body = '{"author": "Marcus Aurelius", "text": "You have power over your mind."}'                               
+>> $body | Out-File quote.json -Encoding utf8 -NoNewline 
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/quotes -H "Content-Type: application/json" -H "Authorization: Bearer $token" -d "@quote.json"
+{"id":13,"author":"Marcus Aurelius","text":"You have power over your mind."}
+Status: 201
+
+// # Try to delete user 1's quote as user 2
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $token2 = "paste-user2-token-here"
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X DELETE http://localhost:5150/api/quotes/10 -H "Authorization: Bearer $token2"
+
+Status: 401
