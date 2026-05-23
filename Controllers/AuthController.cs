@@ -47,7 +47,7 @@ public class AuthController : ControllerBase
                             BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
         }
 
-        if (!passwordValid)
+        if (!passwordValid || user is null)
             return Unauthorized();
 
         var accessToken  = MintAccessToken(user);
