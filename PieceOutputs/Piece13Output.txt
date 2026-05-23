@@ -1,0 +1,137 @@
+1) Login endpoint
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using QuotesApi.Data;
+using QuotesApi.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace QuotesApi.Controllers;
+
+[ApiController]
+[Route("api/auth")]
+public class AuthController : ControllerBase
+{
+    private readonly AppDbContext    _db;
+    private readonly IConfiguration _config;
+
+    public AuthController(AppDbContext db, IConfiguration config)
+    {
+        _db     = db;
+        _config = config;
+    }
+
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email);
+
+        if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            return Unauthorized();
+
+        var key          = Encoding.UTF8.GetBytes(_config["Jwt:Key"]!);
+        var expiresInMin = double.Parse(_config["Jwt:ExpiresInMinutes"]!);
+        var tokenHandler = new JwtSecurityTokenHandler();
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email,          user.Email),
+                new Claim("jti",                     Guid.NewGuid().ToString())
+            }),
+            Expires            = DateTime.UtcNow.AddMinutes(expiresInMin),
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(key),
+                SecurityAlgorithms.HmacSha256Signature)
+        };
+
+        var token        = tokenHandler.CreateToken(tokenDescriptor);
+        var accessToken  = tokenHandler.WriteToken(token);
+        var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var expiresIn    = (int)TimeSpan.FromMinutes(expiresInMin).TotalSeconds;
+
+        return Ok(new
+        {
+            access_token  = accessToken,
+            refresh_token = refreshToken,
+            expires_in    = expiresIn
+        });
+    }
+
+    public sealed class LoginRequest
+    {
+        public string Email    { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}
+
+2) Curl Outputs:
+curl POST without a token → 401:
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $body = '{"author": "Marcus Aurelius", "text": "You have power over your mind."}'
+>> $body | Out-File quote.json -Encoding utf8
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/quotes -H "Content-Type: application/json" -d "@quote.json"
+
+Status: 401
+
+With a valid token → 200:
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiYjllMjUzZDktYTE3Ni00ZjQ4LWJmOGEtNTg4YWE5N2Q1OGNhIiwibmJmIjoxNzc5MzM5OTgxLCJleHAiOjE3NzkzNDM1ODEsImlhdCI6MTc3OTMzOTk4MX0.XpKuBivjkPolRBccHy-0GVtsR4AEsWAVZC58XrfrTU0"
+>> curl.exe -v -X POST http://localhost:5150/api/quotes -H "Content-Type: application/json" -H "Authorization: Bearer $token" -d "@quote.json"
+Note: Unnecessary use of -X or --request, POST is already inferred.
+* Host localhost:5150 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:5150...
+* Established connection to localhost (::1 port 5150) from ::1 port 63795 
+* using HTTP/1.x
+> POST /api/quotes HTTP/1.1
+> Host: localhost:5150
+> User-Agent: curl/8.19.0
+> Accept: */*
+> Content-Type: application/json
+> Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiYjllMjUzZDktYTE3Ni00ZjQ4LWJmOGEtNTg4YWE5N2Q1OGNhIiwibmJmIjoxNzc5MzM5OTgxLCJleHAiOjE3NzkzNDM1ODEsImlhdCI6MTc3OTMzOTk4MX0.XpKuBivjkPolRBccHy-0GVtsR4AEsWAVZC58XrfrTU0
+> Content-Length: 74
+> 
+* upload completely sent off: 74 bytes
+< HTTP/1.1 201 Created
+< Content-Type: application/json; charset=utf-8
+< Date: Thu, 21 May 2026 05:08:21 GMT
+< Server: Kestrel
+< Location: /api/quotes/8
+< Transfer-Encoding: chunked
+< 
+{"id":8,"author":"Marcus Aurelius","text":"You have power over your mind."}* Connection #0 to host localhost:5150 left intact
+
+With an expired token → 401 with the right WWW-Authenticate header.:
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiNWJhMjFjMTUtOGIzMS00ZjFjLTgwZjAtMmYyMzNjYTFlMzVjIiwibmJmIjoxNzc5MzQwMjgxLCJleHAiOjE3NzkzNDA0MDEsImlhdCI6MTc3OTM0MDI4MX0.-8U2lLWfJVk5XmpDf1j4QQ1A3NSo-14-Y77xICDZqsM"
+>> curl.exe -v -X POST http://localhost:5150/api/quotes -H "Content-Type: application/json" -H "Authorization: Bearer $token" -d "@quote.json"
+Note: Unnecessary use of -X or --request, POST is already inferred.
+* Host localhost:5150 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:5150...
+* Established connection to localhost (::1 port 5150) from ::1 port 62136 
+* using HTTP/1.x
+> POST /api/quotes HTTP/1.1
+> Host: localhost:5150
+> User-Agent: curl/8.19.0
+> Accept: */*
+> Content-Type: application/json
+> Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiNWJhMjFjMTUtOGIzMS00ZjFjLTgwZjAtMmYyMzNjYTFlMzVjIiwibmJmIjoxNzc5MzQwMjgxLCJleHAiOjE3NzkzNDA0MDEsImlhdCI6MTc3OTM0MDI4MX0.-8U2lLWfJVk5XmpDf1j4QQ1A3NSo-14-Y77xICDZqsM
+> Content-Length: 74
+> 
+* upload completely sent off: 74 bytes
+< HTTP/1.1 401 Unauthorized
+< Content-Length: 0
+< Date: Thu, 21 May 2026 05:14:26 GMT
+< Server: Kestrel
+< WWW-Authenticate: Bearer error="invalid_token", error_description="The token expired at '05/21/2026 05:13:21'"
+< 
+* Connection #0 to host localhost:5150 left intact
+
+
