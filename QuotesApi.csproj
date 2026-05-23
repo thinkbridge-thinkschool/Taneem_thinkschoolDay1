@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**</DefaultItemExcludes>
     <UserSecretsId>29cc2099-3d0c-4d53-96fd-2f749758b3af</UserSecretsId>
+    <ContainerRepository>quotes-api</ContainerRepository>
+    <ContainerImageTag>0.1.0</ContainerImageTag>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
   </PropertyGroup>
 
   <ItemGroup>

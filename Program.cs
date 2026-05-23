@@ -109,6 +109,8 @@ if (!builder.Environment.IsEnvironment("Testing"))
     }
 }
 
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
 app.MapControllers();
 app.MapQuoteEndpoints();
 app.MapCollectionEndpoints();
