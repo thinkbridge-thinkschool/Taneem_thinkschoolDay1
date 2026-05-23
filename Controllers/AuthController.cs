@@ -2,10 +2,12 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using QuotesApi.Data;
 using QuotesApi.Extensions;
 using QuotesApi.Models;
+using QuotesApi.Options;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -18,16 +20,16 @@ namespace QuotesApi.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext    _db;
-    private readonly IConfiguration _config;
+    private readonly JwtOptions      _jwt;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         AppDbContext db,
-        IConfiguration config,
+        IOptions<JwtOptions> jwtOptions,
         ILogger<AuthController> logger)
     {
         _db     = db;
-        _config = config;
+        _jwt    = jwtOptions.Value;
         _logger = logger;
     }
 
@@ -60,8 +62,7 @@ public class AuthController : ControllerBase
         {
             access_token  = accessToken,
             refresh_token = rawRefresh,
-            expires_in    = (int)TimeSpan.FromMinutes(
-                double.Parse(_config["Jwt:ExpiresInMinutes"]!)).TotalSeconds
+            expires_in    = (int)_jwt.AccessTokenLifetime.TotalSeconds
         });
     }
 
@@ -120,8 +121,7 @@ public class AuthController : ControllerBase
         {
             access_token  = MintAccessToken(user),
             refresh_token = newRawRefresh,
-            expires_in    = (int)TimeSpan.FromMinutes(
-                double.Parse(_config["Jwt:ExpiresInMinutes"]!)).TotalSeconds
+            expires_in    = (int)_jwt.AccessTokenLifetime.TotalSeconds
         });
     }
 
@@ -148,8 +148,8 @@ public class AuthController : ControllerBase
 
     private string MintAccessToken(User user)
     {
-        var key          = Encoding.UTF8.GetBytes(_config["Jwt:Key"]!);
-        var expiresInMin = double.Parse(_config["Jwt:ExpiresInMinutes"]!);
+        var key          = Encoding.UTF8.GetBytes(_jwt.Key);
+        var expiresInMin = _jwt.AccessTokenLifetime.TotalMinutes;
         var handler      = new JwtSecurityTokenHandler();
 
         var descriptor = new SecurityTokenDescriptor

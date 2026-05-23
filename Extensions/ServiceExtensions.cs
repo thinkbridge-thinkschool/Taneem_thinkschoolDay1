@@ -5,11 +5,13 @@ using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using QuotesApi.Authorization;
 using QuotesApi.Data;
+using QuotesApi.Options;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
 
@@ -25,6 +27,8 @@ public static class ServiceExtensions
         this IServiceCollection services,
         IConfiguration          configuration)
     {
+        services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
+
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite(configuration.GetConnectionString("Default")));
 
@@ -77,7 +81,7 @@ services.AddAuthorization(options =>
                     ValidateLifetime        = true,
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey         = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!)),
+                        Encoding.UTF8.GetBytes(configuration["Jwt:Key"] ?? string.Empty)),
                     ClockSkew = TimeSpan.Zero
                 };
             })
