@@ -1,0 +1,37 @@
+1) Paste your Serilog setup :
+//appsettings.json
+"Serilog": {
+  "MinimumLevel": {
+    "Default": "Information",
+    "Override": {
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
+    }
+  },
+  "WriteTo": [
+    {
+      "Name": "Console",
+      "Args": {
+        "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {TraceId} {SourceContext} {Message:lj}{NewLine}{Exception}"
+      }
+    }
+  ],
+  "Enrich": [ "FromLogContext" ]
+}
+
+-Traced Middleware //Program.class
+app.Use((ctx, next) =>
+{
+    using (LogContext.PushProperty("TraceId", ctx.TraceIdentifier))
+        return next(ctx);
+});
+
+
+
+2) 5 lines of structured log output from a single request, showing the correlation ID linking them:
+[08:24:35 DBG] 950b8309779633f8fbf3b285f0f7185a Microsoft.EntityFrameworkCore.Database.Command Executing DbCommand [Parameters=[@request_Email='?' (Size = 16)], CommandType='Text', CommandTimeout='30']
+[08:24:35 INF] 950b8309779633f8fbf3b285f0f7185a Microsoft.EntityFrameworkCore.Database.Command Executed DbCommand (10ms) [Parameters=[@request_Email='?' (Size = 16)], CommandType='Text', CommandTimeout='30']
+[08:24:35 DBG] 950b8309779633f8fbf3b285f0f7185a Microsoft.EntityFrameworkCore.Database.Command Closing data reader to 'main' on server 'C:\Users\tanee\Desktop\thinkschool\day-1\quotes.db'.
+[08:24:35 DBG] 950b8309779633f8fbf3b285f0f7185a Microsoft.EntityFrameworkCore.Database.Command Executing DbCommand [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 36), @p2='?', @p3='?' (DbType = DateTime), @p4='?' (Size = 64), @p5='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+[08:24:35 INF] 950b8309779633f8fbf3b285f0f7185a Microsoft.EntityFrameworkCore.Database.Command Executed DbCommand (7ms) [Parameters=[@p0='?' (DbType = DateTime), @p1='?' (Size = 36), @p2='?', @p3='?' (DbType = DateTime), @p4='?' (Size = 64), @p5='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+
