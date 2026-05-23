@@ -31,3 +31,10 @@ which is why p50 (213ms) and p99 (680ms) are so far apart for that endpoint.
 App was run locally due to student subscription Container Apps environment
 limit (max 1 environment, already used by shared subscription). Telemetry
 was sent to App Insights via the OTel connection string configured in Day 4.
+
+Skipped "Container Apps fundamentals" and "Deploy via azd CLI" due to Azure student 
+subscription limit. The shared subscription only allows 1 Container Apps Environment, 
+which was already consumed by a previous deployment. azd up also creates its own environment
+ automatically, hitting the same limit. To work around this, the app was run locally and telemetry 
+ was sent directly to App Insights via the OTel connection string configured in Day 4. 
+ All endpoints worked correctly locally — the only missing piece was the live Azure URL.
