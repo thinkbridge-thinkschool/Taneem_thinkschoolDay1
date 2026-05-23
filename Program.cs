@@ -4,6 +4,7 @@ using QuotesApi.Extensions;
 using QuotesApi.Middleware;
 using QuotesApi.Models;
 using BCrypt.Net;
+using System.Diagnostics;
 using Serilog;
 using Serilog.Context;
 
@@ -21,10 +22,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
-// Stamp every log line in this request with the same TraceId
+// Stamp every log line with the OTel TraceId so logs and traces correlate
 app.Use((ctx, next) =>
 {
-    using (LogContext.PushProperty("TraceId", ctx.TraceIdentifier))
+    var traceId = Activity.Current?.TraceId.ToString() ?? ctx.TraceIdentifier;
+    using (LogContext.PushProperty("TraceId", traceId))
         return next(ctx);
 });
 

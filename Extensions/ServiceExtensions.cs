@@ -1,34 +1,47 @@
+using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using QuotesApi.Authorization;
 using QuotesApi.Data;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
 
-
 namespace QuotesApi.Extensions;
 
 public static class ServiceExtensions
 {
+    // Shared ActivitySource — controllers import this to create custom spans
+    public static readonly ActivitySource ActivitySource =
+        new("QuotesApi", "1.0.0");
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration          configuration)
     {
-       services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(configuration.GetConnectionString("Default")));
-            services.AddHttpContextAccessor();
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlite(configuration.GetConnectionString("Default")));
 
+        var otlpEndpoint = configuration["OpenTelemetry:Endpoint"] ?? "http://localhost:4317";
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(r => r.AddService("QuotesApi"))
+            .WithTracing(t => t
+                .AddSource(ActivitySource.Name)
+                .AddAspNetCoreInstrumentation()
+                .AddEntityFrameworkCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint)));
+        services.AddHttpContextAccessor();
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
-
-       services.AddHttpContextAccessor();
-services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
 
 services.AddAuthorization(options =>
 {

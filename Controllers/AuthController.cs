@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuotesApi.Data;
+using QuotesApi.Extensions;
 using QuotesApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -37,7 +39,15 @@ public class AuthController : ControllerBase
         var user = await _db.Users
             .FirstOrDefaultAsync(u => u.Email == request.Email);
 
-        if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        bool passwordValid;
+        using (var span = ServiceExtensions.ActivitySource.StartActivity("bcrypt.verify"))
+        {
+            span?.SetTag("user.id", user?.Id);
+            passwordValid = user is not null &&
+                            BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+        }
+
+        if (!passwordValid)
             return Unauthorized();
 
         var accessToken  = MintAccessToken(user);
