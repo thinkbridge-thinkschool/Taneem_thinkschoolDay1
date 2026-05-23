@@ -1,0 +1,99 @@
+1) Paste 3 sample tests showing the pattern:
+Pattern 1:
+[Fact]
+public void Create_ValidInputs_ReturnsQuoteWithTrimmedValues()
+{
+    // Arrange
+    var author = "  Mark Twain  ";
+    var text   = "  The secret of getting ahead is getting started.  ";
+
+    // Act
+    var quote = Quote.Create(author, text, createdByUserId: 7);
+
+    // Assert
+    quote.Author.Should().Be("Mark Twain");
+    quote.Text.Should().Be("The secret of getting ahead is getting started.");
+    quote.CreatedByUserId.Should().Be(7);
+    quote.IsDeleted.Should().BeFalse();
+}
+
+Pattern 2:
+[Theory]
+[InlineData("")]        // empty string
+[InlineData("   ")]     // whitespace-only
+public void Create_BlankAuthor_ThrowsQuoteAuthorInvalidException(string author)
+{
+    // Arrange / Act
+    var act = () => Quote.Create(author, "Some text");
+
+    // Assert
+    act.Should().Throw<QuoteAuthorInvalidException>()
+       .WithMessage("*empty*");
+}
+
+Pattern 3:
+[Fact]
+public void AddItem_WithFakeClock_SetsAddedAtFromClock()
+{
+    // Arrange
+    var fixedTime = new DateTimeOffset(2025, 6, 15, 12, 0, 0, TimeSpan.Zero);
+
+    var clock = Substitute.For<IClock>();
+    clock.UtcNow.Returns(fixedTime);   // NSubstitute: always return this value
+
+    var collection = Collection.Create("Test", ownerId: 1);
+
+    // Act
+    collection.AddItem(quoteId: 10, clock);
+
+    // Assert
+    collection.Items[0].AddedAt.Should().Be(fixedTime);
+}
+
+2)  The test run output showing all green + the total time:
+
+  Passed QuoteTests.Create_BlankAuthor_ThrowsQuoteAuthorInvalidException(author: "")    [25 ms]
+  Passed QuoteTests.Create_BlankAuthor_ThrowsQuoteAuthorInvalidException(author: "   ") [< 1 ms]
+  Passed QuoteTests.Create_ValidInputs_ReturnsQuoteWithTrimmedValues                    [3 ms]
+  Passed QuoteTests.Create_AuthorExactly200Chars_Succeeds                               [< 1 ms]
+  Passed QuoteTests.Create_AuthorOf201Chars_ThrowsQuoteAuthorInvalidException           [1 ms]
+  Passed QuoteTests.Create_TextExactly1000Chars_Succeeds                                [32 ms]
+  Passed QuoteTests.Create_TextOf1001Chars_ThrowsQuoteTextInvalidException              [1 ms]
+  Passed QuoteTests.SoftDelete_CalledOnce_SetsIsDeletedToTrue                           [1 ms]
+  Passed QuoteTests.SoftDelete_CalledTwice_RemainsDeleted                               [< 1 ms]
+  Passed QuoteTests.SoftDelete_DoesNotClearAuthorOrText                                 [< 1 ms]
+  Passed RefreshTokenTests.IsExpired_ExpiresAtIsInThePast_ReturnsTrue                   [< 1 ms]
+  Passed RefreshTokenTests.IsExpired_ExpiresAtIsInTheFuture_ReturnsFalse                [< 1 ms]
+  Passed RefreshTokenTests.IsRevoked_RevokedAtHasValue_ReturnsTrue                      [< 1 ms]
+  Passed RefreshTokenTests.IsRevoked_RevokedAtIsNull_ReturnsFalse                       [< 1 ms]
+  Passed RefreshTokenTests.IsActive_NotExpiredAndNotRevoked_ReturnsTrue                 [< 1 ms]
+  Passed RefreshTokenTests.IsActive_Expired_ReturnsFalse                                [< 1 ms]
+  Passed RefreshTokenTests.IsActive_Revoked_ReturnsFalse                                [< 1 ms]
+  Passed RefreshTokenTests.IsActive_BothExpiredAndRevoked_ReturnsFalse                  [< 1 ms]
+  Passed RefreshTokenTests.ReplacedByToken_WhenNull_TokenHasNotBeenRotated              [< 1 ms]
+  Passed RefreshTokenTests.ReplacedByToken_WhenNotNull_…TriggeringReuseDetection        [2 ms]
+  Passed CollectionTests.Create_ValidName_SetsNameAndOwnerId                            [3 ms]
+  Passed CollectionTests.Create_BlankName_ThrowsCollectionNameInvalidException("")      [8 ms]
+  Passed CollectionTests.Create_BlankName_ThrowsCollectionNameInvalidException("  ")    [< 1 ms]
+  Passed CollectionTests.Create_NameOf2Chars_ThrowsCollectionNameInvalidException       [< 1 ms]
+  Passed CollectionTests.Create_NameOf81Chars_ThrowsCollectionNameInvalidException      [1 ms]
+  Passed CollectionTests.Rename_ValidName_UpdatesName                                   [< 1 ms]
+  Passed CollectionTests.Rename_TooShortName_ThrowsCollectionNameInvalidException       [3 ms]
+  Passed CollectionTests.AddItem_WithFakeClock_SetsAddedAtFromClock                     [1 ms]
+  Passed CollectionTests.AddItem_DoesNotUseSystemClock_UsesInjectedClock                [< 1 ms]
+  Passed CollectionTests.AddItem_TwoItemsWithSequentialClockTimes_…                     [13 ms]
+  Passed CollectionTests.AddItem_WhenCollectionIsAlreadyFull_…                          [263 ms]
+  Passed CollectionTests.AddItem_DuplicateQuoteId_ThrowsDuplicateQuoteException         [1 ms]
+  Passed CollectionTests.RemoveItem_NonExistentQuoteId_…                                [1 ms]
+  Passed CollectionTests.RemoveItem_AfterAddingItem_LeavesCollectionEmpty               [< 1 ms]
+  Passed CollectionTests.RemoveItem_OneOfMultipleItems_RemovesOnlyThatItem              [12 ms]
+  Passed CollectionTests.RemoveItem_ThenAddSameQuoteAgain_Succeeds                      [3 ms]
+  ... (43 total)
+
+Test Run Successful.
+Total tests: 43
+     Passed: 43
+ Total time: 3.34 Seconds
+
+
+
