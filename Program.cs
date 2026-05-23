@@ -5,10 +5,22 @@ using QuotesApi.Middleware;
 using QuotesApi.Models;
 using BCrypt.Net;
 using System.Diagnostics;
+using Azure.Identity;
 using Serilog;
 using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Pull secrets from Key Vault when a vault name is configured.
+// Locally: DefaultAzureCredential uses `az login`.
+// In prod: uses the app's Managed Identity — no credentials in code.
+var keyVaultName = builder.Configuration["KeyVault:Name"];
+if (!string.IsNullOrEmpty(keyVaultName))
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri($"https://{keyVaultName}.vault.azure.net/"),
+        new DefaultAzureCredential());
+}
 
 builder.Host.UseSerilog((ctx, cfg) =>
     cfg.ReadFrom.Configuration(ctx.Configuration));

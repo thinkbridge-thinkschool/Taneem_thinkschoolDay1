@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -29,7 +30,7 @@ public static class ServiceExtensions
 
         var otlpEndpoint = configuration["OpenTelemetry:Endpoint"] ?? "http://localhost:4317";
 
-        services.AddOpenTelemetry()
+        var otelBuilder = services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService("QuotesApi"))
             .WithTracing(t => t
                 .AddSource(ActivitySource.Name)
@@ -37,6 +38,12 @@ public static class ServiceExtensions
                 .AddEntityFrameworkCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint)));
+
+        // When App Insights connection string is present, also export to Azure Monitor.
+        // Locally this is absent — Jaeger only. In prod Key Vault supplies the value.
+        var appInsightsConnStr = configuration["AppInsights:ConnectionString"];
+        if (!string.IsNullOrEmpty(appInsightsConnStr))
+            otelBuilder.UseAzureMonitor(o => o.ConnectionString = appInsightsConnStr);
         services.AddHttpContextAccessor();
         services.AddScoped<IQuoteRepository,      QuoteRepository>();
         services.AddScoped<ICollectionRepository, CollectionRepository>();
