@@ -74,6 +74,9 @@ Result:
 │ wisdom     │
 ╰────────────╯
 
+Screenshot Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day7/piece39-set-operations/PieceOutputs/Piece39OutputSS.png
+
 Operator used: UNION
 Why: UNION merges both result sets and removes duplicates automatically.
 'leadership' and 'resilience' come from classic (Churchill); 'wisdom' comes
