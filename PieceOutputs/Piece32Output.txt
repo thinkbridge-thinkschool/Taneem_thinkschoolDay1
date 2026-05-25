@@ -42,15 +42,4 @@ Body       : {"status":"healthy"}
 Server     : Kestrel
 Date       : Mon, 25 May 2026 04:37:57 GMT
 
-## Notes
 
-- azd up created: Azure Container Registry + Container Apps Environment +
-  Container App — all via Bicep templates automatically
-- SQLite needed ConnectionStrings__Default=Data Source=/tmp/quotes.db
-  set as environment variable — /app is read-only in the container
-- Jwt__Key also passed as environment variable — never baked into image
-- azure.yaml needed project: ./QuotesApi.csproj (not .) because the root
-  directory has multiple .csproj files and MSBuild can't build a solution
-  directory directly via azd
-- First azd up failed because a portal-created environment already existed
-  in East US. Had to delete it first to free the 1-environment quota.

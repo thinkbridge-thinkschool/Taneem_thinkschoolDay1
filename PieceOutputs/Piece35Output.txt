@@ -22,42 +22,16 @@ on live Azure Container Apps deployment.
 ## Week 1 Reflection
 
 What AI accelerated the most:
-The biggest acceleration was in auth — specifically the refresh token
-rotation with reuse detection, and the 28 integration tests covering every
-branch of AuthController. Writing those tests manually would have taken a
-full day. With AI, I described the scenario and got working test code in
-minutes. OpenTelemetry setup was similar — wiring up OTLP exporter, Azure
-Monitor, and custom spans is normally hours of reading docs. AI compressed
-that to under 30 minutes.
+The biggest help from AI was in authentication, especially refresh token rotation and the integration tests for AuthController. Writing 28 tests manually would have taken me a full day, but with AI I could describe the scenarios and get working test code much faster. The same happened with OpenTelemetry setup — configuring OTLP exporter, Azure Monitor, and tracing usually takes hours of documentation reading, but AI reduced it to less than 30 minutes.
 
 Where AI suggested something subtly wrong:
-The N+1 bug demonstration. AI initially suggested using Thread.Sleep to
-fake a slow endpoint, which would have been artificial and wouldn't show
-anything useful in Jaeger. I caught it because the exercise said "diagnose
-using traces" — a sleep doesn't produce multiple DB spans. Switching to a
-real N+1 query made the trace meaningful: 12 spans vs 2 spans, clearly
-visible in Jaeger.
+One place where AI was slightly wrong was the N+1 query demonstration. It first suggested adding Thread.Sleep to fake a slow endpoint, but that would not actually show a tracing problem in Jaeger. I realized the goal was to diagnose database behavior through traces, so I changed it to a real N+1 query. That made the issue clear because Jaeger showed 12 spans instead of 2.
 
 Weakest competency:
-Azure infrastructure. I understand the code side well — OTel, Polly, JWT —
-but the Azure-specific parts (Key Vault RBAC, Container Apps environment
-limits, region restrictions on student subscriptions) kept blocking me.
-Plan before Week 2: read the Azure Container Apps docs end-to-end,
-understand the resource hierarchy (subscription → resource group →
-environment → app), and practice az CLI commands without the portal.
+My weakest area right now is Azure infrastructure. I am comfortable with the application side like OpenTelemetry, Polly, and JWT, but Azure concepts such as Key Vault RBAC, Container Apps limits, and student subscription restrictions slowed me down. Before Week 2, I plan to study Azure Container Apps properly, understand the resource hierarchy, and practice using the az CLI instead of depending only on the portal.
 
 What surprised me about the pace:
-How much we shipped in 5 days. Auth with refresh token rotation, EF Core
-with soft deletes, structured logging, distributed tracing, container
-images, and a live deployment on Azure — this would normally be 3-4 weeks
-for a junior engineer working alone. The AI-in-the-loop model changes the
-equation: I spent time understanding and deciding, not typing boilerplate.
-Understanding didn't get skipped — it got compressed. I actually know why
-FindAsync causes N+1, why Alpine breaks SQLite, and why jitter matters in
-retry policies.
+What surprised me most was the speed of progress in just five days. We completed authentication with refresh token rotation, EF Core soft deletes, structured logging, distributed tracing, Docker containers, and a live Azure deployment. Normally this would take a junior engineer several weeks. AI reduced the time spent writing boilerplate, so I could focus more on understanding decisions and debugging problems.
 
 What felt fragile:
-SQLite in production. It works for the exercise but loses all data on
-container restart (/tmp is ephemeral). Week 2 should introduce a managed
-database. Also Jwt__Key as a plain environment variable works but Key Vault
-is the right answer for production secrets.
+The most fragile part of the project is SQLite in production. Since the database is stored in /tmp, container restarts can wipe all data. For Week 2, moving to a managed database would make more sense. Secrets management is also weak right now because Jwt__Key is stored as a plain environment variable. Using Azure Key Vault would be a more production-ready approach.
