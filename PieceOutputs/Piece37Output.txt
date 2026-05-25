@@ -23,12 +23,20 @@ LIMIT 10;
 
 ## Result set (top 10 rows)
 
-Author    | QuoteCount | MostRecentQuote
-----------|------------|--------------------------------------------------------------------
-Seed      | 10         | When you reach the end of your rope, tie a knot in it and hang on.
-Einstein  | 3          | The measure of intelligence is the ability to change.
-Churchill | 2          | If you are going through hell, keep going.
-Mandela   | 1          | It always seems impossible until it is done.
+───────────┬────────────┬────────────────────────────────────────────────────────────────────╮
+│  Author   │ QuoteCount │                          MostRecentQuote                           │
+╞═══════════╪════════════╪════════════════════════════════════════════════════════════════════╡
+│ Seed      │         10 │ When you reach the end of your rope, tie a knot in it and hang on. │
+│ Einstein  │          3 │ The measure of intelligence is the ability to change.              │
+│ Churchill │          2 │ If you are going through hell, keep going.                         │
+│ Mandela   │          1 │ It always seems impossible until it is done.     
+
+ Note:
+ The exercise asks for top 10 rows but only 4 authors exist in the database 
+ ecause the Quotes DB was seeded with test data (10 quotes all by "Seed" author) and
+ 6 additional quotes were manually inserted for 3 more authors (Einstein, Churchill, Mandela)
+ to demonstrate the CTE across multiple authors. The query uses LIMIT 10 and returns all available rows.
+ In a production database with more authors the result would show 10 rows.                 │
 
 ## Why CTE over a correlated subquery?
 A CTE is more efficient because it calculates the aggregation results only once and then reuses them for all authors.
