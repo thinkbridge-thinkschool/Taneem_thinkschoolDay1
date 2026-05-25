@@ -1,0 +1,63 @@
+Day 5 — Smoke-test the deployed API and Week 1 reflection
+==========================================================
+
+## Live URL
+
+https://day-1.bluestone-ca3d52ab.eastus.azurecontainerapps.io
+
+## Smoke-test results
+
+GET  /health                  → 200 {"status":"healthy"}
+GET  /api/quotes?page=1&size=10 → 200 [10 seeded quotes]
+GET  /api/quotes/1            → 200 {"id":1,"author":"Seed",...}
+GET  /api/quotes/external     → 200 [zenquotes.io random quote via Polly]
+POST /api/auth/login          → 200 {"access_token":"eyJ...","refresh_token":"..."}
+POST /api/quotes              → 201 {"id":11,"author":"Taneem","text":"Ship it."}
+DELETE /api/quotes/1          → 204 No Content (soft delete)
+POST /api/auth/logout         → 204 No Content
+
+All endpoints passed. Full auth flow, CRUD, and external HTTP call working
+on live Azure Container Apps deployment.
+
+## Week 1 Reflection
+
+What AI accelerated the most:
+The biggest acceleration was in auth — specifically the refresh token
+rotation with reuse detection, and the 28 integration tests covering every
+branch of AuthController. Writing those tests manually would have taken a
+full day. With AI, I described the scenario and got working test code in
+minutes. OpenTelemetry setup was similar — wiring up OTLP exporter, Azure
+Monitor, and custom spans is normally hours of reading docs. AI compressed
+that to under 30 minutes.
+
+Where AI suggested something subtly wrong:
+The N+1 bug demonstration. AI initially suggested using Thread.Sleep to
+fake a slow endpoint, which would have been artificial and wouldn't show
+anything useful in Jaeger. I caught it because the exercise said "diagnose
+using traces" — a sleep doesn't produce multiple DB spans. Switching to a
+real N+1 query made the trace meaningful: 12 spans vs 2 spans, clearly
+visible in Jaeger.
+
+Weakest competency:
+Azure infrastructure. I understand the code side well — OTel, Polly, JWT —
+but the Azure-specific parts (Key Vault RBAC, Container Apps environment
+limits, region restrictions on student subscriptions) kept blocking me.
+Plan before Week 2: read the Azure Container Apps docs end-to-end,
+understand the resource hierarchy (subscription → resource group →
+environment → app), and practice az CLI commands without the portal.
+
+What surprised me about the pace:
+How much we shipped in 5 days. Auth with refresh token rotation, EF Core
+with soft deletes, structured logging, distributed tracing, container
+images, and a live deployment on Azure — this would normally be 3-4 weeks
+for a junior engineer working alone. The AI-in-the-loop model changes the
+equation: I spent time understanding and deciding, not typing boilerplate.
+Understanding didn't get skipped — it got compressed. I actually know why
+FindAsync causes N+1, why Alpine breaks SQLite, and why jitter matters in
+retry policies.
+
+What felt fragile:
+SQLite in production. It works for the exercise but loses all data on
+container restart (/tmp is ephemeral). Week 2 should introduce a managed
+database. Also Jwt__Key as a plain environment variable works but Key Vault
+is the right answer for production secrets.
