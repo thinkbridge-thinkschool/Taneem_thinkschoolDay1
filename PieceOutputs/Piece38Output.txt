@@ -1,0 +1,73 @@
+Day 7 — Window functions
+=========================
+
+## SQL Query
+
+SELECT
+    Author,
+    Text,
+    ROW_NUMBER() OVER (PARTITION BY Author ORDER BY Id)           AS QuoteNumber,
+    RANK()       OVER (ORDER BY Id)                               AS GlobalRank,
+    LAG(Text)    OVER (PARTITION BY Author ORDER BY Id)           AS PreviousQuote,
+    SUM(1)       OVER (PARTITION BY Author ORDER BY Id
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal
+FROM Quotes
+WHERE IsDeleted = 0
+ORDER BY Author, Id;
+
+## Result set (sample rows)
+
+Author    | QuoteNumber | GlobalRank | PreviousQuote                              | RunningTotal
+----------|-------------|------------|--------------------------------------------|-------------
+Churchill | 1           | 14         | NULL                                       | 1
+Churchill | 2           | 15         | Success is not final, failure is not fatal.| 2
+Churchill | 3           | 19         | If you are going through hell, keep going. | 3
+Churchill | 4           | 20         | We shall never surrender.                  | 4
+Churchill | 5           | 21         | Attitude is a little thing...              | 5
+Einstein  | 1           | 11         | NULL                                       | 1
+Einstein  | 2           | 12         | Imagination is more important than knowledge| 2
+Einstein  | 3           | 13         | Life is like riding a bicycle...           | 3
+Einstein  | 4           | 17         | The measure of intelligence...             | 4
+Einstein  | 5           | 18         | A person who never made a mistake...       | 5
+Mandela   | 1           | 16         | NULL                                       | 1
+Mandela   | 2           | 22         | It always seems impossible until it is done| 2
+Mandela   | 3           | 23         | Education is the most powerful weapon...   | 3
+Mandela   | 4           | 24         | Do not judge me by my successes...         | 4
+Seed      | 1           | 1          | NULL                                       | 1
+Seed      | 2           | 2          | The only way to do great work...           | 2
+...       | ...         | ...        | ...                                        | ...
+Seed      | 10          | 10         | Spread love everywhere you go.             | 10
+
+## What each window function does
+
+- ROW_NUMBER() OVER (PARTITION BY Author ORDER BY Id)
+  Numbers each quote per author starting from 1. Resets for each author.
+
+- RANK() OVER (ORDER BY Id)
+  Ranks every quote globally across all authors by Id.
+
+- LAG(Text) OVER (PARTITION BY Author ORDER BY Id)
+  Shows the previous quote by the same author. First quote shows NULL.
+
+- SUM(1) OVER (PARTITION BY Author ORDER BY Id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+  Running count of quotes per author up to the current row.
+
+## What we learned
+
+- PARTITION BY resets the window per group (per author here)
+- ORDER BY inside OVER controls the order within the window
+- LAG/LEAD access adjacent rows without a self-join
+- ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW makes SUM cumulative
+- First row in each partition always shows NULL for LAG (no previous row)
+- Window functions do not reduce rows — unlike GROUP BY, every row stays
+
+## Failure modes / edge cases
+
+- LAG returns NULL for the first row in each partition — always handle NULL
+  in application code if displaying PreviousQuote
+- RANK vs ROW_NUMBER — RANK skips numbers on ties (1,1,3),
+  ROW_NUMBER never skips (1,2,3). Use ROW_NUMBER when you need unique ranks.
+- No CreatedAt column — ORDER BY Id assumes auto-increment = insertion order.
+  Wrong if IDs are assigned out of sequence.
+- Soft-deleted quotes filtered before window — WHERE IsDeleted = 0 applied
+  first, so RunningTotal counts only active quotes per author.
