@@ -1,0 +1,36 @@
+1) Paste your JwtOptions class:
+//JwtOption.cs
+public sealed class JwtOptions
+{
+    public string   Key                 { get; init; } = string.Empty;
+    public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromMinutes(15);
+}
+
+2) appsettings section :
+"Jwt": {
+  "Key": "",
+  "AccessTokenLifetime": "00:15:00"
+}
+
+3) The DI registration :
+// ServiceExtensions.cs
+services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
+
+// Injected in AuthController.cs
+public AuthController(
+    AppDbContext db,
+    IOptions<JwtOptions> jwtOptions,
+    ILogger<AuthController> logger)
+{
+    _jwt = jwtOptions.Value;
+}
+
+4) Used in MintAccessToken
+var key          = Encoding.UTF8.GetBytes(_jwt.Key);
+var expiresInMin = _jwt.AccessTokenLifetime.TotalMinutes;
+
+5)Command Output :
+PS C:\Users\tanee\Desktop\thinkschool\day-1> dotnet user-secrets set "Jwt:Key" "your-signing-key"
+>> 
+Successfully saved Jwt:Key to the secret store.
+
