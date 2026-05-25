@@ -1,0 +1,56 @@
+Day 5 — Deploy via azd CLI
+===========================
+
+## azure.yaml
+
+name: day-1
+services:
+    day-1:
+        project: ./QuotesApi.csproj
+        host: containerapp
+        language: dotnet
+resources:
+    day-1:
+        type: host.containerapp
+        port: 8080
+
+## azd up output
+
+(✓) Done: Container Apps Environment: cae-52rtnrlidzqie (34.132s)
+(✓) Done: Container App: day-1 (18.515s)
+
+Service  Status   Duration
+───────  ───────  ──────────
+day-1    Done     1m47s
+
+Endpoint: https://day-1.bluestone-ca3d52ab.eastus.azurecontainerapps.io/
+
+SUCCESS: Your application was provisioned and deployed to Azure in 3 minutes 49 seconds.
+  Provisioning: 2 minutes 1 second
+  Deploying:    1 minute 47 seconds
+
+## Live URL
+
+https://day-1.bluestone-ca3d52ab.eastus.azurecontainerapps.io/
+
+## curl /health
+
+curl "https://day-1.bluestone-ca3d52ab.eastus.azurecontainerapps.io/health"
+
+StatusCode : 200
+Body       : {"status":"healthy"}
+Server     : Kestrel
+Date       : Mon, 25 May 2026 04:37:57 GMT
+
+## Notes
+
+- azd up created: Azure Container Registry + Container Apps Environment +
+  Container App — all via Bicep templates automatically
+- SQLite needed ConnectionStrings__Default=Data Source=/tmp/quotes.db
+  set as environment variable — /app is read-only in the container
+- Jwt__Key also passed as environment variable — never baked into image
+- azure.yaml needed project: ./QuotesApi.csproj (not .) because the root
+  directory has multiple .csproj files and MSBuild can't build a solution
+  directory directly via azd
+- First azd up failed because a portal-created environment already existed
+  in East US. Had to delete it first to free the 1-environment quota.
