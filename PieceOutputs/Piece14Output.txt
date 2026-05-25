@@ -1,0 +1,90 @@
+1) Paste the refresh endpoint code 
+// Controllers/AuthController.cs
+
+[HttpPost("refresh")]
+public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
+{
+    var hashed = HashToken(request.RefreshToken);
+
+    var existing = await _db.RefreshTokens
+        .FirstOrDefaultAsync(t => t.Token == hashed);
+
+    if (existing is null)
+        return Unauthorized();
+
+    // ── Reuse detection ───────────────────────────────────────────────
+    // Token was already replaced — someone is reusing a rotated token.
+    // This means either the old token was stolen or the client is buggy.
+    // Revoke the entire family and force re-auth.
+    if (existing.ReplacedByToken is not null)
+    {
+        _logger.LogWarning(
+            "Refresh token reuse detected for user {UserId} family {Family}. " +
+            "Revoking entire chain.", existing.UserId, existing.Family);
+
+        var family = await _db.RefreshTokens
+            .Where(t => t.Family == existing.Family)
+            .ToListAsync();
+
+        foreach (var t in family)
+            t.RevokedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return Unauthorized(new { message = "Token reuse detected. Please log in again." });
+    }
+
+    if (!existing.IsActive)
+        return Unauthorized();
+
+    var user = await _db.Users.FindAsync(existing.UserId);
+    if (user is null)
+        return Unauthorized();
+
+    // ── Rotate ───────────────────────────────────────────────────────
+    // Generate new pair, mark old token as revoked and point to replacement
+    var (newRawRefresh, newStoredRefresh) = CreateRefreshToken(user.Id, existing.Family);
+
+    existing.RevokedAt       = DateTime.UtcNow;
+    existing.ReplacedByToken = newStoredRefresh.Token;
+
+    _db.RefreshTokens.Add(newStoredRefresh);
+    await _db.SaveChangesAsync();
+
+    return Ok(new
+    {
+        access_token  = MintAccessToken(user),
+        refresh_token = newRawRefresh,
+        expires_in    = (int)TimeSpan.FromMinutes(
+            double.Parse(_config["Jwt:ExpiresInMinutes"]!)).TotalSeconds
+    });
+}
+
+2) Test showing reuse-detection kills the chain.
+-Login, get Token A
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $body = '{"email": "test@example.com", "password": "Password123!"}'
+>> $body | Out-File login.json -Encoding utf8 -NoNewline
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/auth/login -H "Content-Type: application/json" -d "@login.json"
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiMTNiNDcxYmItZTc0Zi00YzNmLThhNzAtN2YwMTk3ZWMzZTMyIiwibmJmIjoxNzc5MzQ0NDAyLCJleHAiOjE3NzkzNDUzMDIsImlhdCI6MTc3OTM0NDQwMn0.Qf_2eExYlLSnZ3sBOiodndVmg9HL_oRrPRJfRXOyvJo","refresh_token":"Q+B0F5wiitILQjkuXp+ecl+6r+/BMnHwNvvI7bvDObwFOQZv18ad/RMLAl7NnlL+p3oWPvZulxYwguZIeJRlDg==","expires_in":900}
+Status: 200
+
+-Using Token A to get Token B
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $tokenA = "Q+B0F5wiitILQjkuXp+ecl+6r+/BMnHwNvvI7bvDObwFOQZv18ad/RMLAl7NnlL+p3oWPvZulxYwguZIeJRlDg=="
+>> $body = "{`"refreshToken`": `"$tokenA`"}"              
+>> $body | Out-File refresh.json -Encoding utf8 -NoNewline                                   
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/auth/refresh -H "Content-Type: application/json" -d "@refresh.json"
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwianRpIjoiNGU3OGE5YzUtOTUxOS00NmVmLWI1YzItOTY3ODYyZDczMmZhIiwibmJmIjoxNzc5MzQ0NDQ0LCJleHAiOjE3NzkzNDUzNDQsImlhdCI6MTc3OTM0NDQ0NH0.E8VevpZv4uRe-MnfhJW7gImd3J8GCnSJxPmrnYFLieI","refresh_token":"UKo/WB12nnaevUdB8gqOUVXQy4tsoauTqyS3bSlWwu3WSIcqD1s6W/1TcRQ3srvH9p6MMdGSOZMMuL8o47Qoig==","expires_in":900}
+Status: 200
+
+-Using Token A again
+PS C:\Users\tanee\Desktop\thinkschool\day-1> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/auth/refresh -H "Content-Type: application/json" -d "@refresh.json"
+{"message":"Token reuse detected. Please log in again."}
+Status: 401
+
+-Trying Token B which should be dead by now 
+PS C:\Users\tanee\Desktop\thinkschool\day-1> $tokenB = "paste-token-B-here"
+>> $body = "{`"refreshToken`": `"$tokenB`"}"
+>> $body | Out-File refreshB.json -Encoding utf8 -NoNewline
+>> curl.exe -s -w "\nStatus: %{http_code}\n" -X POST http://localhost:5150/api/auth/refresh -H "Content-Type: application/json" -d "@refreshB.json"
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.2","title":"Unauthorized","status":401,"traceId":"00-b786d3755ca8df40a4195cb71f21203b-445bd40c8a471a1b-00"}
+Status: 401
