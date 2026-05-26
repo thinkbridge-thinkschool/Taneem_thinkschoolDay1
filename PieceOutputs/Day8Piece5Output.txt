@@ -1,0 +1,64 @@
+Day 8 — Covering indexes + included columns
+===========================================
+
+## Query used
+
+SELECT Author, CreatedAt, Text FROM QuoteLogs WHERE Author = 'Einstein';
+
+## Before plan (no covering index)
+
+  |--Clustered Index Scan(
+       OBJECT:([IndexDemo].[dbo].[QuoteLogs].[CIX_QuoteLogs_Id]),
+       WHERE:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein'))
+
+Logical reads before: 99
+
+Why this happens:
+IX_QuoteLogs_Author only stores the Author key. The query also needs CreatedAt
+and Text, which are not in that index. SQL Server had two choices:
+  1. Index seek on IX_QuoteLogs_Author + 25,000 key lookups back to the clustered
+     index to fetch CreatedAt and Text (one round-trip per matching row)
+  2. Scan the clustered index directly and filter for Einstein
+
+With 25,000 matching rows (25% selectivity), SQL Server chose option 2 —
+25,000 key lookups would cost more than a single clustered index scan.
+
+## Covering index DDL
+
+CREATE NONCLUSTERED INDEX IX_QuoteLogs_Author_Covering
+    ON QuoteLogs(Author)
+    INCLUDE (CreatedAt, Text);
+
+INCLUDE puts CreatedAt and Text in the leaf pages of the index alongside Author.
+The index now contains every column the query needs — no trip back to the
+clustered index required.
+
+## After plan (key lookup eliminated)
+
+  |--Index Seek(
+       OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author_Covering]),
+       SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
+
+Logical reads after: 99
+
+## Plan change explained
+
+Before: Clustered Index Scan — SQL Server reads every page in the clustered
+        index and discards non-Einstein rows
+After:  Index Seek — SQL Server jumps directly to Einstein rows in the covering
+        index and reads only those pages; no key lookup step at all
+
+The logical reads count is the same (99) because the covering index stores
+Author + CreatedAt + Text for all 100k rows, making it similar in page size
+to the clustered index slice it replaced. The proof is in the plan, not the
+read count — the Clustered Index Scan was replaced by a pure Index Seek with
+no Key Lookup operator.
+
+## Write-side cost of the covering index
+
+Building the index: Scan count 5, logical reads 921
+(SQL Server read all 100k rows to build the covering index structure)
+Every future INSERT/UPDATE/DELETE must maintain this index in addition to
+the clustered index and the two non-clustered indexes already present.
+
+
