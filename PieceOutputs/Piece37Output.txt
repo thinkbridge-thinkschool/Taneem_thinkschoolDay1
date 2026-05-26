@@ -1,0 +1,46 @@
+Day 7 — Joins and CTEs at depth
+================================
+
+## SQL Query
+
+WITH AuthorStats AS (
+    SELECT
+        Author,
+        COUNT(*)  AS QuoteCount,
+        MAX(Id)   AS LatestQuoteId
+    FROM Quotes
+    WHERE IsDeleted = 0
+    GROUP BY Author
+)
+SELECT
+    s.Author,
+    s.QuoteCount,
+    q.Text AS MostRecentQuote
+FROM AuthorStats s
+INNER JOIN Quotes q ON q.Id = s.LatestQuoteId
+ORDER BY s.QuoteCount DESC
+LIMIT 10;
+
+## Result set (top 10 rows)
+
+───────────┬────────────┬────────────────────────────────────────────────────────────────────╮
+│  Author   │ QuoteCount │                          MostRecentQuote                           │
+╞═══════════╪════════════╪════════════════════════════════════════════════════════════════════╡
+│ Seed      │         10 │ When you reach the end of your rope, tie a knot in it and hang on. │
+│ Einstein  │          3 │ The measure of intelligence is the ability to change.              │
+│ Churchill │          2 │ If you are going through hell, keep going.                         │
+│ Mandela   │          1 │ It always seems impossible until it is done.     
+
+ Note:
+ The exercise asks for top 10 rows but only 4 authors exist in the database 
+ ecause the Quotes DB was seeded with test data (10 quotes all by "Seed" author) and
+ 6 additional quotes were manually inserted for 3 more authors (Einstein, Churchill, Mandela)
+ to demonstrate the CTE across multiple authors. The query uses LIMIT 10 and returns all available rows.
+ In a production database with more authors the result would show 10 rows.                 │
+
+## Why CTE over a correlated subquery?
+A CTE is more efficient because it calculates the aggregation results only once and then reuses them for all authors.
+A correlated subquery, on the other hand, runs again for every single row.
+With a small dataset like 4 authors, the performance difference is hardly noticeable, but with 10,000 authors it becomes expensive because the database keeps repeating the same work thousands of times.
+The CTE version is also easier to read and maintain.
+The aggregation logic is written separately with a clear name, so the final query becomes cleaner and easier to understand.

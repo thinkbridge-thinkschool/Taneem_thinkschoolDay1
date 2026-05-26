@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: day-1
+metadata:
+    template: azd-init@1.25.2
+services:
+    day-1:
+        project: ./QuotesApi.csproj
+        host: containerapp
+        language: dotnet
+resources:
+    day-1:
+        type: host.containerapp
+        port: 8080
