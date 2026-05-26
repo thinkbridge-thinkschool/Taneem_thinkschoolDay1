@@ -61,4 +61,6 @@ Building the index: Scan count 5, logical reads 921
 Every future INSERT/UPDATE/DELETE must maintain this index in addition to
 the clustered index and the two non-clustered indexes already present.
 
-
+Screenshot Links:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece5-covering-indexes/Screenshots/day8p5ss.png
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece5-covering-indexes/Screenshots/dayp5ss1.png
