@@ -81,3 +81,6 @@ VALUES (100001, 'Test', '2026-01-01', 'write cost check');
   Logical reads: 8  (SQL Server must update the clustered index + both non-clustered
                      index B-trees on every insert — 3 structures maintained per write)
 
+Screenshots Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece4-clustered-nonclustered-indexes/Screenshots/day8p4ss.png
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece4-clustered-nonclustered-indexes/Screenshots/day8p4ss1.png
