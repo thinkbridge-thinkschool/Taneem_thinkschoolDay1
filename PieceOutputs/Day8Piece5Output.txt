@@ -1,0 +1,76 @@
+Day 8 — Covering indexes + included columns
+===========================================
+
+## Note on mentor review and changes made
+
+First submission was rejected because the before plan showed a Clustered Index Scan
+instead of Index Seek + Key Lookup. SQL Server avoided the Key Lookup because
+Einstein had 25,000 matching rows (25% of table) — doing 25,000 key lookups was
+more expensive than just scanning the clustered index directly.
+
+Fix applied:
+- Used WITH (INDEX(IX_QuoteLogs_Author)) hint to force SQL Server to use the
+  non-clustered Author index, producing the required Index Seek + Key Lookup plan
+- Used TOP 10 to limit rows so the key lookup cost is realistic
+- This correctly shows the before state which is required for this piece.
+
+## Query used
+
+SELECT TOP 10 Author, CreatedAt, Text
+FROM QuoteLogs WITH (INDEX(IX_QuoteLogs_Author))
+WHERE Author = 'Einstein';
+
+## Before plan (Index Seek + Key Lookup)
+
+  |--Top(TOP EXPRESSION:((10)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([Uniq1001],
+            [IndexDemo].[dbo].[QuoteLogs].[Id], [Expr1003]) WITH UNORDERED PREFETCH)
+            |--Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author]),
+                 SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
+            |--Clustered Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[CIX_QuoteLogs_Id]),
+                 SEEK:(...) LOOKUP ORDERED FORWARD)
+
+Logical reads before: 39
+
+Why this happens:
+IX_QuoteLogs_Author only stores Author + Id pointer. The query also needs
+CreatedAt and Text. So for each row found by the Index Seek, SQL Server does
+a Key Lookup — goes back to the clustered index to fetch the missing columns.
+10 rows = 10 key lookups = 39 logical reads total.
+
+## Covering index DDL
+
+CREATE NONCLUSTERED INDEX IX_QuoteLogs_Author_Covering
+    ON QuoteLogs(Author)
+    INCLUDE (CreatedAt, Text);
+
+INCLUDE puts CreatedAt and Text in the leaf pages of the index alongside Author.
+The index now contains every column the query needs — no trip back to the
+clustered index required.
+
+## After plan (Key Lookup eliminated)
+
+  |--Top(TOP EXPRESSION:((10)))
+       |--Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author_Covering]),
+            SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
+
+Logical reads after: 4
+
+## Logical reads delta
+
+Before (Index Seek + Key Lookup): 39 reads
+After  (Index Seek only):          4 reads
+Reduction: 89% fewer reads
+
+The Key Lookup operator is completely gone from the plan. SQL Server now serves
+the entire query from the covering index in one step.
+
+## Write-side cost
+
+Building the covering index: Scan count 5, logical reads 921
+Every future INSERT/UPDATE/DELETE must maintain this index in addition to the
+clustered index and the two non-clustered indexes already present — 4 structures
+updated on every write.
+
+Screenshot Links:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/tree/day8/piece5-covering-indexes/Screenshots/day8Piece5Screenshots
