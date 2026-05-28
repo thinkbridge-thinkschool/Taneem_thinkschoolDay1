@@ -1,0 +1,119 @@
+Day 9 — Isolation levels + read anomalies
+==========================================
+
+## Setup
+
+Database: IndexDemo (SQL Server in Docker)
+Table: QuoteLogs (100,000 rows)
+Two sessions used simultaneously to reproduce each anomaly.
+
+## Anomaly 1 — Dirty Read
+
+A dirty read occurs when Session 2 reads data that Session 1 has changed
+but not yet committed. If Session 1 rolls back, Session 2 read data that
+never actually existed.
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Author = 'DIRTY' WHERE Id = 4;
+-- DO NOT COMMIT
+
+### Session 2
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SELECT Author FROM QuoteLogs WHERE Id = 4;
+
+### Result
+Author
+------
+DIRTY       ← uncommitted data read by Session 2
+
+Session 1 then rolled back → the value 'DIRTY' never existed in the database.
+Session 2 read data that was never committed.
+
+### Prevention
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+Session 2 blocked and waited until Session 1 committed.
+Only committed data was returned — dirty read eliminated.
+
+---
+
+## Anomaly 2 — Non-Repeatable Read
+
+A non-repeatable read occurs when Session 2 reads the same row twice within
+the same transaction but gets different values because Session 1 modified
+and committed the row in between.
+
+### Session 2 (first read)
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN TRANSACTION;
+SELECT Author FROM QuoteLogs WHERE Id = 4;
+→ Einstein
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Author = 'CHANGED' WHERE Id = 4;
+COMMIT;
+
+### Session 2 (second read — same transaction)
+SELECT Author FROM QuoteLogs WHERE Id = 4;
+→ CHANGED
+
+Same transaction, same query, two different values.
+
+### Prevention
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+Session 1's UPDATE blocked until Session 2 committed.
+REPEATABLE READ holds shared locks on read rows — no other session can
+modify them until the transaction ends.
+
+---
+
+## Anomaly 3 — Phantom Read
+
+A phantom read occurs when Session 2 reads a range of rows twice within
+the same transaction but gets a different count because Session 1 inserted
+a new matching row in between.
+
+### Session 2 (first read)
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN TRANSACTION;
+SELECT COUNT(*) FROM QuoteLogs WHERE Author = 'Einstein';
+→ 25000
+
+### Session 1
+INSERT INTO QuoteLogs (Id, Author, CreatedAt, Text)
+VALUES (100002, 'Einstein', '2026-01-01', 'Phantom row');
+
+### Session 2 (second read — same transaction)
+SELECT COUNT(*) FROM QuoteLogs WHERE Author = 'Einstein';
+→ 25001
+
+Same transaction, same query, extra row appeared.
+
+### Prevention
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+Session 1's INSERT blocked until Session 2 committed.
+SERIALIZABLE holds key-range locks — no new rows matching the WHERE clause
+can be inserted until the transaction ends.
+
+---
+
+## Isolation level summary
+
+Anomaly              | Lowest level that prevents it
+---------------------|------------------------------
+Dirty read           | READ COMMITTED
+Non-repeatable read  | REPEATABLE READ
+Phantom read         | SERIALIZABLE
+
+## Isolation levels from weakest to strongest
+
+READ UNCOMMITTED → READ COMMITTED → REPEATABLE READ → SERIALIZABLE
+
+Higher isolation = fewer anomalies = more blocking = lower concurrency.
+
+Screenshot Links:
+
