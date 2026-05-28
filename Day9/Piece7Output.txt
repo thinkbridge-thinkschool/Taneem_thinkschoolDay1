@@ -86,25 +86,5 @@ Deadlock             | Not prevented by isolation level — fix via lock orderin
 
 ---
 
-## What we learned
-
-- A deadlock occurs when two sessions each hold a lock the other needs —
-  neither can proceed, SQL Server kills one as the victim (error 1205)
-- Trace flag 1222 (DBCC TRACEON(1222, -1)) writes deadlock graphs to the
-  error log — readable via sp_readerrorlog
-- The fix is consistent lock ordering — all sessions must acquire locks on
-  shared resources in the same sequence
-- SQL Server automatically detects deadlocks within ~5 seconds and picks a
-  victim (usually the transaction with the least rollback cost)
-- Deadlocks are a design smell — they signal that transaction logic needs review
-
-## Failure modes / edge cases
-
-- Consistent lock ordering only works if all code paths follow the same order —
-  one stored procedure or ORM query acquiring locks differently breaks it
-- Keeping transactions short reduces the window for deadlocks — long transactions
-  hold locks longer, increasing collision probability
-- Application code must handle error 1205 and retry the transaction — the victim
-  transaction is fully rolled back
-- Deadlock priority can be set with SET DEADLOCK_PRIORITY — useful when one
-  transaction is more expensive to roll back than the other
+Screenshots Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/tree/day9/Day9/Piece7Screenshots
