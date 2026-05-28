@@ -1,0 +1,110 @@
+Day 9 — Reproduce and resolve a deadlock
+=========================================
+
+## Setup
+
+Database: IndexDemo (SQL Server in Docker)
+Table: QuoteLogs (100,000 rows)
+Two sessions used simultaneously.
+Trace flag 1222 enabled to capture deadlock graph.
+
+DBCC TRACEON(1222, -1);  -- server-wide, run once in either session
+
+---
+
+## Repro scripts — forcing the deadlock
+
+The classic two-resource deadlock: Session 1 holds row 4 and wants row 8.
+Session 2 holds row 8 and wants row 4. Circular dependency → deadlock.
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S1 locked 4' WHERE Id = 4;  -- acquires X lock on row 4
+-- pause --
+UPDATE QuoteLogs SET Text = 'S1 wants 8'  WHERE Id = 8;  -- blocks, waiting for row 8
+
+### Session 2
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S2 locked 8' WHERE Id = 8;  -- acquires X lock on row 8
+-- pause --
+UPDATE QuoteLogs SET Text = 'S2 wants 4'  WHERE Id = 4;  -- DEADLOCK
+
+### Deadlock victim message (Session 2)
+
+Msg 1205, Level 13, State 51, Server c04c74c5f1e3, Line 4
+Transaction (Process ID 51) was deadlocked on lock resources with another
+process and has been chosen as the deadlock victim. Rerun the transaction.
+
+---
+
+## Deadlock graph (trace flag 1222 — sp_readerrorlog)
+
+LogDate                   ProcessInfo   Text
+------------------------- ------------- ---------------------------
+2026-05-28 06:53:26.520   spid34s       deadlock-list
+2026-05-28 06:53:26.520   spid34s       deadlock victim=processb8f807848
+
+SQL Server detected the circular lock dependency and killed Session 2
+(the deadlock victim) to break the cycle. Session 1 completed successfully.
+
+---
+
+## Fix — consistent lock ordering
+
+Always acquire locks in the same order across all sessions.
+Both sessions update row 4 first, then row 8 — no circular dependency possible.
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S1 locked 4' WHERE Id = 4;  -- locks row 4
+UPDATE QuoteLogs SET Text = 'S1 locked 8' WHERE Id = 8;  -- locks row 8
+COMMIT;
+
+### Session 2
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S2 locked 4' WHERE Id = 4;  -- waits for Session 1 (no deadlock)
+UPDATE QuoteLogs SET Text = 'S2 locked 8' WHERE Id = 8;  -- completes after Session 1 commits
+COMMIT;
+
+### Result
+Session 2 blocked on row 4 and waited — no error, no victim, both committed cleanly.
+
+Why it works: when all sessions acquire locks in the same order, no circular
+dependency can form. Session 2 waits for Session 1 to release row 4 instead
+of holding row 8 and demanding row 4 simultaneously.
+
+---
+
+## Isolation level summary table
+
+Anomaly              | Lowest level that prevents it
+---------------------|------------------------------
+Dirty read           | READ COMMITTED
+Non-repeatable read  | REPEATABLE READ
+Phantom read         | SERIALIZABLE
+Deadlock             | Not prevented by isolation level — fix via lock ordering
+
+---
+
+## What we learned
+
+- A deadlock occurs when two sessions each hold a lock the other needs —
+  neither can proceed, SQL Server kills one as the victim (error 1205)
+- Trace flag 1222 (DBCC TRACEON(1222, -1)) writes deadlock graphs to the
+  error log — readable via sp_readerrorlog
+- The fix is consistent lock ordering — all sessions must acquire locks on
+  shared resources in the same sequence
+- SQL Server automatically detects deadlocks within ~5 seconds and picks a
+  victim (usually the transaction with the least rollback cost)
+- Deadlocks are a design smell — they signal that transaction logic needs review
+
+## Failure modes / edge cases
+
+- Consistent lock ordering only works if all code paths follow the same order —
+  one stored procedure or ORM query acquiring locks differently breaks it
+- Keeping transactions short reduces the window for deadlocks — long transactions
+  hold locks longer, increasing collision probability
+- Application code must handle error 1205 and retry the transaction — the victim
+  transaction is fully rolled back
+- Deadlock priority can be set with SET DEADLOCK_PRIORITY — useful when one
+  transaction is more expensive to roll back than the other
