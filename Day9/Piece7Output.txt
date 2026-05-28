@@ -1,0 +1,90 @@
+Day 9 — Reproduce and resolve a deadlock
+=========================================
+
+## Setup
+
+Database: IndexDemo (SQL Server in Docker)
+Table: QuoteLogs (100,000 rows)
+Two sessions used simultaneously.
+Trace flag 1222 enabled to capture deadlock graph.
+
+DBCC TRACEON(1222, -1);  -- server-wide, run once in either session
+
+---
+
+## Repro scripts — forcing the deadlock
+
+The classic two-resource deadlock: Session 1 holds row 4 and wants row 8.
+Session 2 holds row 8 and wants row 4. Circular dependency → deadlock.
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S1 locked 4' WHERE Id = 4;  -- acquires X lock on row 4
+-- pause --
+UPDATE QuoteLogs SET Text = 'S1 wants 8'  WHERE Id = 8;  -- blocks, waiting for row 8
+
+### Session 2
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S2 locked 8' WHERE Id = 8;  -- acquires X lock on row 8
+-- pause --
+UPDATE QuoteLogs SET Text = 'S2 wants 4'  WHERE Id = 4;  -- DEADLOCK
+
+### Deadlock victim message (Session 2)
+
+Msg 1205, Level 13, State 51, Server c04c74c5f1e3, Line 4
+Transaction (Process ID 51) was deadlocked on lock resources with another
+process and has been chosen as the deadlock victim. Rerun the transaction.
+
+---
+
+## Deadlock graph (trace flag 1222 — sp_readerrorlog)
+
+LogDate                   ProcessInfo   Text
+------------------------- ------------- ---------------------------
+2026-05-28 06:53:26.520   spid34s       deadlock-list
+2026-05-28 06:53:26.520   spid34s       deadlock victim=processb8f807848
+
+SQL Server detected the circular lock dependency and killed Session 2
+(the deadlock victim) to break the cycle. Session 1 completed successfully.
+
+---
+
+## Fix — consistent lock ordering
+
+Always acquire locks in the same order across all sessions.
+Both sessions update row 4 first, then row 8 — no circular dependency possible.
+
+### Session 1
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S1 locked 4' WHERE Id = 4;  -- locks row 4
+UPDATE QuoteLogs SET Text = 'S1 locked 8' WHERE Id = 8;  -- locks row 8
+COMMIT;
+
+### Session 2
+BEGIN TRANSACTION;
+UPDATE QuoteLogs SET Text = 'S2 locked 4' WHERE Id = 4;  -- waits for Session 1 (no deadlock)
+UPDATE QuoteLogs SET Text = 'S2 locked 8' WHERE Id = 8;  -- completes after Session 1 commits
+COMMIT;
+
+### Result
+Session 2 blocked on row 4 and waited — no error, no victim, both committed cleanly.
+
+Why it works: when all sessions acquire locks in the same order, no circular
+dependency can form. Session 2 waits for Session 1 to release row 4 instead
+of holding row 8 and demanding row 4 simultaneously.
+
+---
+
+## Isolation level summary table
+
+Anomaly              | Lowest level that prevents it
+---------------------|------------------------------
+Dirty read           | READ COMMITTED
+Non-repeatable read  | REPEATABLE READ
+Phantom read         | SERIALIZABLE
+Deadlock             | Not prevented by isolation level — fix via lock ordering
+
+---
+
+Screenshots Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/tree/day9/Day9/Piece7Screenshots
