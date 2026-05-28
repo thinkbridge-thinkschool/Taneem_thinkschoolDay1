@@ -1,27 +1,42 @@
 Day 8 — Covering indexes + included columns
 ===========================================
 
+## Note on mentor review and changes made
+
+First submission was rejected because the before plan showed a Clustered Index Scan
+instead of Index Seek + Key Lookup. SQL Server avoided the Key Lookup because
+Einstein had 25,000 matching rows (25% of table) — doing 25,000 key lookups was
+more expensive than just scanning the clustered index directly.
+
+Fix applied:
+- Used WITH (INDEX(IX_QuoteLogs_Author)) hint to force SQL Server to use the
+  non-clustered Author index, producing the required Index Seek + Key Lookup plan
+- Used TOP 10 to limit rows so the key lookup cost is realistic
+- This correctly shows the before state the exercise requires
+
 ## Query used
 
-SELECT Author, CreatedAt, Text FROM QuoteLogs WHERE Author = 'Einstein';
+SELECT TOP 10 Author, CreatedAt, Text
+FROM QuoteLogs WITH (INDEX(IX_QuoteLogs_Author))
+WHERE Author = 'Einstein';
 
-## Before plan (no covering index)
+## Before plan (Index Seek + Key Lookup)
 
-  |--Clustered Index Scan(
-       OBJECT:([IndexDemo].[dbo].[QuoteLogs].[CIX_QuoteLogs_Id]),
-       WHERE:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein'))
+  |--Top(TOP EXPRESSION:((10)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([Uniq1001],
+            [IndexDemo].[dbo].[QuoteLogs].[Id], [Expr1003]) WITH UNORDERED PREFETCH)
+            |--Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author]),
+                 SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
+            |--Clustered Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[CIX_QuoteLogs_Id]),
+                 SEEK:(...) LOOKUP ORDERED FORWARD)
 
-Logical reads before: 99
+Logical reads before: 39
 
 Why this happens:
-IX_QuoteLogs_Author only stores the Author key. The query also needs CreatedAt
-and Text, which are not in that index. SQL Server had two choices:
-  1. Index seek on IX_QuoteLogs_Author + 25,000 key lookups back to the clustered
-     index to fetch CreatedAt and Text (one round-trip per matching row)
-  2. Scan the clustered index directly and filter for Einstein
-
-With 25,000 matching rows (25% selectivity), SQL Server chose option 2 —
-25,000 key lookups would cost more than a single clustered index scan.
+IX_QuoteLogs_Author only stores Author + Id pointer. The query also needs
+CreatedAt and Text. So for each row found by the Index Seek, SQL Server does
+a Key Lookup — goes back to the clustered index to fetch the missing columns.
+10 rows = 10 key lookups = 39 logical reads total.
 
 ## Covering index DDL
 
@@ -33,33 +48,51 @@ INCLUDE puts CreatedAt and Text in the leaf pages of the index alongside Author.
 The index now contains every column the query needs — no trip back to the
 clustered index required.
 
-## After plan (key lookup eliminated)
+## After plan (Key Lookup eliminated)
 
-  |--Index Seek(
-       OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author_Covering]),
-       SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
+  |--Top(TOP EXPRESSION:((10)))
+       |--Index Seek(OBJECT:([IndexDemo].[dbo].[QuoteLogs].[IX_QuoteLogs_Author_Covering]),
+            SEEK:([IndexDemo].[dbo].[QuoteLogs].[Author]=N'Einstein') ORDERED FORWARD)
 
-Logical reads after: 99
+Logical reads after: 4
 
-## Plan change explained
+## Logical reads delta
 
-Before: Clustered Index Scan — SQL Server reads every page in the clustered
-        index and discards non-Einstein rows
-After:  Index Seek — SQL Server jumps directly to Einstein rows in the covering
-        index and reads only those pages; no key lookup step at all
+Before (Index Seek + Key Lookup): 39 reads
+After  (Index Seek only):          4 reads
+Reduction: 89% fewer reads
 
-The logical reads count is the same (99) because the covering index stores
-Author + CreatedAt + Text for all 100k rows, making it similar in page size
-to the clustered index slice it replaced. The proof is in the plan, not the
-read count — the Clustered Index Scan was replaced by a pure Index Seek with
-no Key Lookup operator.
+The Key Lookup operator is completely gone from the plan. SQL Server now serves
+the entire query from the covering index in one step.
 
-## Write-side cost of the covering index
+## Write-side cost
 
-Building the index: Scan count 5, logical reads 921
-(SQL Server read all 100k rows to build the covering index structure)
-Every future INSERT/UPDATE/DELETE must maintain this index in addition to
-the clustered index and the two non-clustered indexes already present.
+Building the covering index: Scan count 5, logical reads 921
+Every future INSERT/UPDATE/DELETE must maintain this index in addition to the
+clustered index and the two non-clustered indexes already present — 4 structures
+updated on every write.
+
+## What we learned
+
+- A non-clustered index only stores its key column(s); any extra column in SELECT
+  forces a Key Lookup back to the clustered index per matching row
+- INCLUDE adds columns to the leaf level of the index without affecting sort order
+- Key Lookups only appear when few rows match — with many rows SQL Server prefers
+  a full clustered scan over thousands of individual lookups
+- WITH (INDEX(...)) hint forces SQL Server to use a specific index when the
+  optimizer would otherwise choose a different plan
+- The covering index eliminated the Key Lookup operator entirely — proven by
+  both the plan change and the 89% drop in logical reads (39 → 4)
+
+## Failure modes / edge cases
+
+- INCLUDEing too many columns bloats the index to the size of the table itself
+- A covering index only covers queries with that exact column list — a different
+  SELECT list may still trigger key lookups
+- SQL Server may ignore a covering index if statistics are stale — run
+  UPDATE STATISTICS to keep the optimizer informed
+- Index hints (WITH INDEX) force a plan regardless of cost — use only for
+  demonstration or when you are certain the index is optimal
 
 Screenshot Links:
 https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece5-covering-indexes/Screenshots/day8p5ss.png
