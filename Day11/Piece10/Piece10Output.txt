@@ -1,212 +1,91 @@
-1) Test Class:
+Day 11 — Profile a slow endpoint
+=================================
 
-using FluentAssertions;
-using QuotesApi.Models;
-using QuotesApi.Services;
-using Xunit;
+## Baseline p50 / p99
 
-namespace Tests.Domain;
+Load: 2 virtual users, 20 iterations against GET /api/quotes/slow
 
-// ── Fake clock — no DI, no infrastructure, just a fixed time ─────────────────
+  http_req_duration: avg=1.24s  min=1.01s  med=1.23s  max=1.41s  p(90)=1.40s  p(99)=1.41s
 
-file sealed class FakeClock : IClock
-{
-    public DateTimeOffset UtcNow { get; } =
-        new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-}
+  p50 = 1.23 s
+  p99 = 1.41 s
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Collection invariant tests
-// Pure domain tests — no DbContext, no fixtures, no setup methods.
-// Target: < 50ms total for the suite.
-// ═════════════════════════════════════════════════════════════════════════════
+A healthy read endpoint should respond in under 50 ms.
+This endpoint is ~25x slower than acceptable.
 
-public sealed class CollectionInvariantTests
-{
-    private static readonly IClock Clock = new FakeClock();
+---
 
-    // ── Name invariants ───────────────────────────────────────────────────
+## The Offending SQL
 
-    [Fact]
-    public void Empty_name_throws()
-    {
-        var act = () => Collection.Create("", ownerId: 1);
+One request to GET /api/quotes/slow emits 21 queries:
 
-        act.Should().Throw<CollectionNameInvalidException>()
-           .WithMessage("*empty*");
-    }
+Query 1 — get all distinct authors:
+  SELECT DISTINCT "q"."Author"
+  FROM "Quotes" AS "q"
+  WHERE NOT ("q"."IsDeleted")
 
-    [Fact]
-    public void Whitespace_only_name_throws()
-    {
-        var act = () => Collection.Create("   ", ownerId: 1);
+Queries 2–21 — one per author (repeated 20 times with a different @author each time):
+  SELECT "q"."Id", "q"."Author", "q"."CreatedByUserId", "q"."IsDeleted", "q"."Text"
+  FROM "Quotes" AS "q"
+  WHERE "q"."Author" = @author AND NOT ("q"."IsDeleted")
 
-        act.Should().Throw<CollectionNameInvalidException>()
-           .WithMessage("*empty*");
-    }
+With 20 authors in the database, every single request fires 21 SQL queries
+instead of 1. Under load this compounds — 20 concurrent users × 21 queries
+= 420 simultaneous database round trips.
 
-    [Fact]
-    public void Name_longer_than_80_chars_throws()
-    {
-        var longName = new string('x', 81);
+---
 
-        var act = () => Collection.Create(longName, ownerId: 1);
+## Execution Plan
 
-        act.Should().Throw<CollectionNameInvalidException>()
-           .WithMessage("*80*");
-    }
+  SET SHOWPLAN_TEXT ON;
+  GO
+  SELECT Id, Author, Text FROM Quotes WHERE Author = 'Einstein' AND IsDeleted = 0;
+  GO
 
-    [Fact]
-    public void Name_shorter_than_3_chars_throws()
-    {
-        var act = () => Collection.Create("ab", ownerId: 1);
+  StmtText
+  |--Clustered Index Scan(OBJECT:([QuotesDb].[dbo].[Quotes].[PK__Quotes__3214EC07]),
+     WHERE:([QuotesDb].[dbo].[Quotes].[IsDeleted]=[@2]
+     AND [QuotesDb].[dbo].[Quotes].[Author]=CONVERT_IMPLICIT(nvarchar(4000),[@1],0)))
 
-        act.Should().Throw<CollectionNameInvalidException>()
-           .WithMessage("*3*");
-    }
+Clustered Index Scan means SQL Server is reading every row in the Quotes table
+to find rows where Author = 'Einstein'. There is no index on Author so the
+database has no shortcut — it must scan all 500 rows on every per-author query.
+A Clustered Index Scan is the most expensive operation — equivalent to a full
+table scan. With an index on Author this would become a much cheaper
+Index Seek, jumping directly to matching rows.
 
-    [Fact]
-    public void Valid_name_at_boundary_3_chars_succeeds()
-    {
-        var act = () => Collection.Create("abc", ownerId: 1);
+---
 
-        act.Should().NotThrow();
-    }
+## Two Biggest Problems
 
-    [Fact]
-    public void Valid_name_at_boundary_80_chars_succeeds()
-    {
-        var name = new string('x', 80);
+Problem 1 — N+1 queries
+  The endpoint fetches distinct authors in one query, then issues a separate
+  query for each author inside a foreach loop. With 20 authors that is 21
+  queries per request. The fix is a single grouped query:
 
-        var act = () => Collection.Create(name, ownerId: 1);
+    SELECT Author, Id, Text
+    FROM Quotes
+    WHERE IsDeleted = 0
+    ORDER BY Author
 
-        act.Should().NotThrow();
-    }
+  One query replaces 21. EF equivalent:
+    db.Quotes
+      .Where(q => !q.IsDeleted)
+      .GroupBy(q => q.Author)
+      .Select(g => new { Author = g.Key, Quotes = g.ToList() })
 
-    // ── Item cap invariant ────────────────────────────────────────────────
+Problem 2 — Missing index on Author
+  Every per-author WHERE clause performs a full table scan (Clustered Index Scan).
+  Adding an index on Author drops this from O(n) to O(log n):
 
-    [Fact]
-    public void Adding_51st_item_throws()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
+    CREATE INDEX IX_Quotes_Author ON Quotes (Author);
 
-        // Add 50 items — all should succeed
-        for (var i = 1; i <= 50; i++)
-            collection.AddItem(i, Clock);
+  EF Core migration equivalent:
+    entity.HasIndex(q => q.Author);
 
-        // 51st item must throw
-        var act = () => collection.AddItem(51, Clock);
+  With the index, the execution plan changes from Clustered Index Scan to
+  Index Seek, meaning SQL Server jumps directly to matching rows.
 
-        act.Should().Throw<CollectionFullException>()
-           .WithMessage("*50*");
-    }
+Screenshots Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/tree/day11/Day11/Screenshots/Day11Piece10SS
 
-    [Fact]
-    public void Adding_exactly_50_items_succeeds()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
-
-        var act = () =>
-        {
-            for (var i = 1; i <= 50; i++)
-                collection.AddItem(i, Clock);
-        };
-
-        act.Should().NotThrow();
-        collection.Items.Should().HaveCount(50);
-    }
-
-    // ── Duplicate invariant ───────────────────────────────────────────────
-
-    [Fact]
-    public void Duplicate_quote_id_throws()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
-        collection.AddItem(quoteId: 42, Clock);
-
-        var act = () => collection.AddItem(quoteId: 42, Clock);
-
-        act.Should().Throw<DuplicateQuoteException>()
-           .WithMessage("*42*");
-    }
-
-    // ── Remove invariant ──────────────────────────────────────────────────
-
-    [Fact]
-    public void Removing_non_existent_item_throws()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
-
-        var act = () => collection.RemoveItem(quoteId: 99);
-
-        act.Should().Throw<QuoteNotInCollectionException>()
-           .WithMessage("*99*");
-    }
-
-    // ── Add then remove ───────────────────────────────────────────────────
-
-    [Fact]
-    public void Adding_then_removing_leaves_zero_items()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
-
-        collection.AddItem(quoteId: 1, Clock);
-        collection.RemoveItem(quoteId: 1);
-
-        collection.Items.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Adding_then_removing_one_of_many_leaves_correct_count()
-    {
-        var collection = Collection.Create("Test Collection", ownerId: 1);
-
-        collection.AddItem(quoteId: 1, Clock);
-        collection.AddItem(quoteId: 2, Clock);
-        collection.AddItem(quoteId: 3, Clock);
-
-        collection.RemoveItem(quoteId: 2);
-
-        collection.Items.Should().HaveCount(2);
-        collection.Items.Should().NotContain(i => i.QuoteId == 2);
-    }
-}
-
-2) Test Output with their execution Time
-
-PS C:\Users\tanee\Desktop\thinkschool\day-1\QuotesApi> dotnet test Tests.Domain\Tests.Domain.csproj --logger "console;verbosity=normal"
-Restore complete (0.9s)
-  QuotesApi net10.0 succeeded (0.8s) → bin\Debug\net10.0\QuotesApi.dll
-  Tests.Domain net10.0 succeeded (0.6s) → Tests.Domain\bin\Debug\net10.0\Tests.Domain.dll
-A total of 1 test files matched the specified pattern.
-[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.8)
-[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.8)
-[xUnit.net 00:00:00.21]   Discovering: Tests.Domain
-[xUnit.net 00:00:00.21]   Discovering: Tests.Domain
-[xUnit.net 00:00:00.31]   Discovered:  Tests.Domain
-[xUnit.net 00:00:00.31]   Discovered:  Tests.Domain
-[xUnit.net 00:00:00.37]   Starting:    Tests.Domain
-[xUnit.net 00:00:00.37]   Starting:    Tests.Domain
-  Passed Tests.Domain.CollectionInvariantTests.Valid_name_at_boundary_80_chars_succeeds [15 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Duplicate_quote_id_throws [33 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Adding_exactly_50_items_succeeds [6 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Adding_then_removing_leaves_zero_items [2 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Name_longer_than_80_chars_throws [1 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Whitespace_only_name_throws [1 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Removing_non_existent_item_throws [3 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Adding_then_removing_one_of_many_leaves_correct_count [2 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Name_shorter_than_3_chars_throws [< 1 ms]
-[xUnit.net 00:00:00.57]   Finished:    Tests.Domain
-[xUnit.net 00:00:00.57]   Finished:    Tests.Domain
-  Passed Tests.Domain.CollectionInvariantTests.Valid_name_at_boundary_3_chars_succeeds [< 1 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Empty_name_throws [1 ms]
-  Passed Tests.Domain.CollectionInvariantTests.Adding_51st_item_throws [3 ms]
-
-Test Run Successful.
-Total tests: 12
-     Passed: 12
- Total time: 2.1574 Seconds
-  Tests.Domain test net10.0 succeeded (2.7s)
-
-Test summary: total: 12, failed: 0, succeeded: 12, skipped: 0, duration: 2.6s
-Build succeeded in 6.2s
