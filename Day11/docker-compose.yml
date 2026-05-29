@@ -1,8 +1,0 @@
-services:
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - "4317:4317"   # OTLP gRPC — QuotesApi sends traces here
-      - "16686:16686" # Jaeger UI — open http://localhost:16686
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
