@@ -1,0 +1,86 @@
+Day 8 — Clustered vs non-clustered indexes
+==========================================
+
+## Note on setup
+
+A new SQL Server database (IndexDemo) was created via Docker and a fresh table
+(QuoteLogs) was generated with 100,000 rows. This was necessary because:
+- The existing Quotes table (SQLite, ~30 rows) is too small to show any measurable
+  difference in logical reads — indexes only matter at scale
+- SET STATISTICS IO ON and clustered/non-clustered index syntax are SQL Server features
+  not available in SQLite
+- The Docker container (sql-dev) acts as a sandbox and does not affect the main project
+
+## Table and data
+
+CREATE TABLE QuoteLogs (
+    Id        INT           NOT NULL,
+    Author    NVARCHAR(100) NOT NULL,
+    CreatedAt DATE          NOT NULL,
+    Text      NVARCHAR(500) NOT NULL
+);
+
+-- 100,000 rows generated via recursive CTE
+WITH gen AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM gen WHERE n < 100000
+)
+INSERT INTO QuoteLogs (Id, Author, CreatedAt, Text)
+SELECT
+    n,
+    CASE (n % 4)
+        WHEN 0 THEN 'Einstein'
+        WHEN 1 THEN 'Churchill'
+        WHEN 2 THEN 'Mandela'
+        ELSE 'Seed'
+    END,
+    DATEADD(DAY, n % 1825, '2020-01-01'),
+    'Quote number ' + CAST(n AS NVARCHAR)
+FROM gen
+OPTION (MAXRECURSION 0);
+
+## Index DDL
+
+-- Clustered index: physically reorders table pages by Id
+CREATE CLUSTERED INDEX CIX_QuoteLogs_Id
+    ON QuoteLogs(Id);
+
+-- Non-clustered index on Author (separate B-tree, leaf points back to clustered key)
+CREATE NONCLUSTERED INDEX IX_QuoteLogs_Author
+    ON QuoteLogs(Author);
+
+-- Non-clustered index on CreatedAt
+CREATE NONCLUSTERED INDEX IX_QuoteLogs_CreatedAt
+    ON QuoteLogs(CreatedAt);
+
+## Logical reads — before vs after indexes
+
+SET STATISTICS IO ON;
+
+Clustered index point lookup:
+Query 1: SELECT * FROM QuoteLogs WHERE Id = 50000;
+  Uses: CIX_QuoteLogs_Id (clustered index point lookup)
+  Reads: 3  (B-tree root → intermediate node → leaf page — best possible)
+
+Non-clustered index seek on Author:
+Query 2: SELECT COUNT(*) FROM QuoteLogs WHERE Author = 'Einstein';
+  Before: Scan count 1, logical reads 891  (full table scan — every page read)
+  After:  Scan count 1, logical reads 99   (index seek on IX_QuoteLogs_Author)
+
+Non-clustered index range scan on CreatedAt:
+Query 3: SELECT COUNT(*) FROM QuoteLogs WHERE CreatedAt > '2023-01-01';
+  Before: Scan count 1, logical reads 891  (full table scan)
+  After:  Scan count 1, logical reads 68   (index seek on IX_QuoteLogs_CreatedAt)
+
+## Write-side cost
+
+INSERT INTO QuoteLogs (Id, Author, CreatedAt, Text)
+VALUES (100001, 'Test', '2026-01-01', 'write cost check');
+
+  Logical reads: 8  (SQL Server must update the clustered index + both non-clustered
+                     index B-trees on every insert — 3 structures maintained per write)
+
+Screenshots Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece4-clustered-nonclustered-indexes/Screenshots/day8p4ss.png
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day8/piece4-clustered-nonclustered-indexes/Screenshots/day8p4ss1.png
