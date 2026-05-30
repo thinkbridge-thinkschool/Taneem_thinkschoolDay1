@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using QuotesApi.Commands;
 using QuotesApi.Data;
 using QuotesApi.DTOs;
 using QuotesApi.Models;
+using QuotesApi.Queries;
 using QuotesApi.Repositories;
 
 namespace QuotesApi.Extensions;
@@ -72,6 +74,32 @@ public static class EndpointExtensions
                 ? Results.NoContent()
                 : Results.NotFound();
         }).RequireAuthorization("can-delete-quotes");
+
+        // ── GET /api/quotes/summary ── CQRS read model ───────────────────
+        group.MapGet("/summary", async (
+            int page,
+            int size,
+            GetQuotesSummaryHandler handler,
+            CancellationToken ct) =>
+        {
+            page = page <= 0 ? 1 : page;
+            size = size <= 0 ? 10 : size;
+
+            var results = await handler.HandleAsync(
+                new GetQuotesSummaryQuery(page, size), ct);
+
+            return Results.Ok(results);
+        });
+
+        // ── POST /api/quotes/command ── CQRS write model ──────────────────
+        group.MapPost("/command", async (
+            CreateQuoteCommand cmd,
+            CreateQuoteHandler handler,
+            CancellationToken ct) =>
+        {
+            var id = await handler.HandleAsync(cmd, ct);
+            return Results.Created($"/api/quotes/{id}", new { id });
+        }).RequireAuthorization("can-write-quotes");
 
         // ── GET /api/quotes/fast ──────────────────────────────────────────
         // Fixed version: single query + index on Author.

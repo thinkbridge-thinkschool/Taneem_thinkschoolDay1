@@ -1,0 +1,96 @@
+Day 12 — Read models + CQRS-lite
+=================================
+
+## Command Handler (write side)
+
+File: Commands/CreateQuoteCommand.cs
+  public record CreateQuoteCommand(string Author, string Text);
+
+File: Commands/CreateQuoteHandler.cs
+  public class CreateQuoteHandler
+  {
+      private readonly AppDbContext _db;
+
+      public CreateQuoteHandler(AppDbContext db) => _db = db;
+
+      public async Task<int> HandleAsync(CreateQuoteCommand cmd, CancellationToken ct)
+      {
+          // Validation happens inside Quote.Create() — handler stays thin
+          var quote = Quote.Create(cmd.Author, cmd.Text);
+          _db.Quotes.Add(quote);
+          await _db.SaveChangesAsync(ct);
+
+          // Returns only the Id — caller does not need the full entity
+          return quote.Id;
+      }
+  }
+
+Endpoint: POST /api/quotes/command
+  Request:  { "author": "Marcus Aurelius", "text": "..." }
+  Response: { "id": 1002 }
+
+Test output:
+  {"id":1002}
+
+---
+
+## Query / Read Model (read side)
+
+File: Queries/QuoteSummaryReadModel.cs
+  public record QuoteSummaryReadModel(
+      int    Id,
+      string Author,
+      string AuthorInitials,  // e.g. "Marcus Aurelius" → "MA"
+      string ShortText        // first 100 chars for list view
+  );
+
+File: Queries/GetQuotesSummaryQuery.cs
+  public record GetQuotesSummaryQuery(int Page, int Size);
+
+File: Queries/GetQuotesSummaryHandler.cs
+  public async Task<List<QuoteSummaryReadModel>> HandleAsync(
+      GetQuotesSummaryQuery query, CancellationToken ct)
+  {
+      // Fetch only Id, Author, Text — IsDeleted and CreatedByUserId
+      // are write-side concerns, not needed for the list screen
+      var rows = await _db.Quotes
+          .Where(q => !q.IsDeleted)
+          .OrderBy(q => q.Id)
+          .Skip((query.Page - 1) * query.Size)
+          .Take(query.Size)
+          .Select(q => new { q.Id, q.Author, q.Text })
+          .ToListAsync(ct);
+
+      // AuthorInitials and ShortText computed client-side
+      return rows.Select(q => new QuoteSummaryReadModel(
+          q.Id,
+          q.Author,
+          string.Concat(q.Author.Split(' ').Select(w => w[0])),
+          q.Text.Length > 100 ? q.Text[..100] + "…" : q.Text
+      )).ToList();
+  }
+
+Endpoint: GET /api/quotes/summary?page=1&size=5
+Test output:
+  [
+    {"id":1,"author":"Seed","authorInitials":"S","shortText":"The only way to do great work is to love what you do."},
+    {"id":2,"author":"Seed","authorInitials":"S","shortText":"In the middle of every difficulty lies opportunity."},
+    {"id":3,"author":"Seed","authorInitials":"S","shortText":"It does not matter how slowly you go as long as you do not stop."},
+    {"id":4,"author":"Seed","authorInitials":"S","shortText":"Life is what happens when you're busy making other plans."},
+    {"id":5,"author":"Seed","authorInitials":"S","shortText":"The future belongs to those who believe in the beauty of their dreams."}
+  ]
+
+---
+
+## What Got Simpler by Separating Them
+
+Before the split, one repository handled both reading and writing, and every
+query loaded the full Quote entity including fields the screen never uses.
+
+After the split:
+- The read side only fetches Id, Author, and Text — nothing extra.
+- The write side only creates and saves a quote — it does not know what
+  the screen looks like or which fields are displayed.
+- If the screen needs a new field tomorrow, only the read model changes.
+- If the validation rules change, only the command handler changes.
+- Neither side breaks the other.

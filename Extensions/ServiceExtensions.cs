@@ -13,7 +13,9 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
 using QuotesApi.Authorization;
+using QuotesApi.Commands;
 using QuotesApi.Data;
+using QuotesApi.Queries;
 using QuotesApi.Options;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
@@ -101,6 +103,10 @@ public static class ServiceExtensions
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
+
+        // CQRS-lite handlers
+        services.AddScoped<CreateQuoteHandler>();
+        services.AddScoped<GetQuotesSummaryHandler>();
 
 services.AddAuthorization(options =>
 {
