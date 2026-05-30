@@ -101,6 +101,22 @@ public static class EndpointExtensions
             return Results.Created($"/api/quotes/{id}", new { id });
         }).RequireAuthorization("can-write-quotes");
 
+        // ── GET /api/quotes/summary/dapper ── Dapper read path ───────────
+        group.MapGet("/summary/dapper", async (
+            int page,
+            int size,
+            GetQuotesSummaryDapperHandler handler,
+            CancellationToken ct) =>
+        {
+            page = page <= 0 ? 1 : page;
+            size = size <= 0 ? 10 : size;
+
+            var results = await handler.HandleAsync(
+                new GetQuotesSummaryQuery(page, size), ct);
+
+            return Results.Ok(results);
+        });
+
         // ── GET /api/quotes/fast ──────────────────────────────────────────
         // Fixed version: single query + index on Author.
         group.MapGet("/fast", async (AppDbContext db, CancellationToken ct) =>

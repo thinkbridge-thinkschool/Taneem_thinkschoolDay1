@@ -108,6 +108,9 @@ public static class ServiceExtensions
         services.AddScoped<CreateQuoteHandler>();
         services.AddScoped<GetQuotesSummaryHandler>();
 
+        // Dapper handler — bypasses EF for hot read path
+        services.AddScoped<GetQuotesSummaryDapperHandler>();
+
 services.AddAuthorization(options =>
 {
     options.AddPolicy("can-write-quotes", p =>
