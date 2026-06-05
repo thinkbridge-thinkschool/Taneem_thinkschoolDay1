@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -54,7 +54,7 @@ jobs:
 
       - name: Cache SQL Server Docker image
         id: cache-mssql
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/mssql.tar
           key: mssql-2022-latest
@@ -89,7 +89,7 @@ jobs:
           name: coverage
           path: ./test-results/**/coverage.cobertura.xml
 
-      - name: Check coverage >= 70%
+      - name: Check coverage >= 35%
         run: |
           dotnet tool install -g dotnet-reportgenerator-globaltool
           reportgenerator \
@@ -106,3 +106,32 @@ jobs:
               raise SystemExit(f'FAILED: coverage {pct}% is below the 35% threshold')
           print('Coverage check passed.')
           "
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Log in to Azure
+        run: |
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
+
+      - name: Deploy to Azure Container Apps
+        run: azd deploy --no-prompt
+        env:
+          AZURE_ENV_NAME: thinkschool
+          AZURE_LOCATION: eastus
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
