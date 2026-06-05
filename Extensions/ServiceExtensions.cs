@@ -41,12 +41,18 @@ public static class ServiceExtensions
 
         var otelBuilder = services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService("QuotesApi"))
-            .WithTracing(t => t
-                .AddSource(ActivitySource.Name)
-                .AddAspNetCoreInstrumentation()
-                .AddEntityFrameworkCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint)));
+            .WithTracing(t =>
+            {
+                t.AddSource(ActivitySource.Name)
+                 .AddAspNetCoreInstrumentation()
+                 .AddEntityFrameworkCoreInstrumentation()
+                 .AddHttpClientInstrumentation();
+
+                // Only add OTLP exporter when a real endpoint is configured
+                // localhost:4317 only exists locally (Jaeger) — skip in Azure
+                if (!otlpEndpoint.Contains("localhost"))
+                    t.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+            });
 
         // When App Insights connection string is present, also export to Azure Monitor.
         // Locally this is absent — Jaeger only. In prod Key Vault supplies the value.

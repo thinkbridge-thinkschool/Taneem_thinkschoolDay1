@@ -114,3 +114,7 @@ In this case, Dapper was 14 times faster because the query only reads data and d
 If the feature needs to update data or work with related entities, EF Core is the better choice.
 
 Keep writes (INSERT, UPDATE, DELETE) in EF Core and use Dapper only for performance-critical reads.
+
+
+Screenshot Link:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day12Piece1-cqrs-lite/Screenshots/day12Piece2SS.png

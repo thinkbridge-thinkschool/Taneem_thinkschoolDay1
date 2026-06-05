@@ -28,6 +28,15 @@ builder.Host.UseSerilog((ctx, cfg) =>
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .SetPreflightMaxAge(TimeSpan.FromHours(1)));
+});
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNameCaseInsensitive = true;
@@ -44,6 +53,7 @@ app.Use((ctx, next) =>
 });
 
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseCors("AllowAngular");
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -110,6 +120,11 @@ if (!builder.Environment.IsEnvironment("Testing"))
     }
 }
 
+app.MapGet("/", () => Results.Ok(new {
+    name = "ThinkSchool Quotes API",
+    status = "running",
+    endpoints = new[] { "/health", "/api/quotes/summary", "/api/quotes/{id}", "/api/auth/login" }
+}));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.MapGet("/api/quotes/external", async (IExternalQuoteService svc, CancellationToken ct) =>
