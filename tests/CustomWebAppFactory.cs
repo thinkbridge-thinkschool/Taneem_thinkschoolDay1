@@ -69,8 +69,8 @@ public class CustomWebAppFactory : WebApplicationFactory<Program>
             // Override Entra scheme to use test key (no authority check)
             services.PostConfigure<JwtBearerOptions>("Entra", options =>
             {
-                options.Authority              = null;
-                options.MetadataAddress        = null;
+                options.Authority              = null!;
+                options.MetadataAddress        = null!;
                 options.RequireHttpsMetadata   = false;
                 options.BackchannelHttpHandler = new System.Net.Http.HttpClientHandler();
                 options.TokenValidationParameters = new TokenValidationParameters

@@ -111,8 +111,8 @@ public sealed class QuotesIntegrationFactory : WebApplicationFactory<Program>
             // ── Disable Entra authority (no real Azure AD in tests) ────────
             services.PostConfigure<JwtBearerOptions>("Entra", opts =>
             {
-                opts.Authority              = null;
-                opts.MetadataAddress        = null;
+                opts.Authority              = null!;
+                opts.MetadataAddress        = null!;
                 opts.RequireHttpsMetadata   = false;
                 opts.BackchannelHttpHandler = new System.Net.Http.HttpClientHandler();
                 opts.TokenValidationParameters = new TokenValidationParameters
