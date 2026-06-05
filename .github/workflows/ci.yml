@@ -53,7 +53,6 @@ jobs:
             --results-directory ./test-results
 
       - name: Cache SQL Server Docker image
-        if: github.event_name == 'pull_request'
         id: cache-mssql
         uses: actions/cache@v4
         with:
@@ -61,17 +60,16 @@ jobs:
           key: mssql-2022-latest
 
       - name: Load SQL Server image from cache
-        if: github.event_name == 'pull_request' && steps.cache-mssql.outputs.cache-hit == 'true'
+        if: steps.cache-mssql.outputs.cache-hit == 'true'
         run: docker load -i /tmp/mssql.tar
 
       - name: Pull and cache SQL Server image
-        if: github.event_name == 'pull_request' && steps.cache-mssql.outputs.cache-hit != 'true'
+        if: steps.cache-mssql.outputs.cache-hit != 'true'
         run: |
           docker pull mcr.microsoft.com/mssql/server:2022-latest
           docker save mcr.microsoft.com/mssql/server:2022-latest -o /tmp/mssql.tar
 
       - name: Test (integration)
-        if: github.event_name == 'pull_request'
         run: |
           dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build \
             --logger "trx;LogFileName=integration.trx" \
