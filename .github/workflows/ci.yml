@@ -85,3 +85,50 @@ jobs:
               raise SystemExit(f'FAILED: coverage {pct}% is below the 35% threshold')
           print('Coverage check passed.')
           "
+
+  integration-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache SQL Server Docker image
+        id: cache-mssql
+        uses: actions/cache@v4
+        with:
+          path: /tmp/mssql.tar
+          key: mssql-2022-latest
+
+      - name: Load SQL Server image from cache
+        if: steps.cache-mssql.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/mssql.tar
+
+      - name: Pull and cache SQL Server image
+        if: steps.cache-mssql.outputs.cache-hit != 'true'
+        run: |
+          docker pull mcr.microsoft.com/mssql/server:2022-latest
+          docker save mcr.microsoft.com/mssql/server:2022-latest -o /tmp/mssql.tar
+
+      - name: Restore
+        run: dotnet restore Quotes.Tests.Integration/Quotes.Tests.Integration.csproj
+
+      - name: Build
+        run: dotnet build Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-restore
+
+      - name: Test (integration)
+        run: |
+          dotnet test Quotes.Tests.Integration/Quotes.Tests.Integration.csproj --no-build \
+            --logger "trx;LogFileName=integration.trx" \
+            --results-directory ./test-results
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-test-results
+          path: ./test-results/**/*.trx
