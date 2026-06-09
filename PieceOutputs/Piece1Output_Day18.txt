@@ -138,10 +138,13 @@ Graceful shutdown (Ctrl+C):
 
 ## Screenshots to take
 1. Terminal showing "Quote processing worker started."
-Screenshot Link:
+Screenshot Link: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day18/Screenshots/day18/worker-started.png
 
 2. Terminal showing "Processing quote 523..." and "Quote 523 processed." (2s apart)
-Screenshot Link:
+Screenshot Link: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day18/Screenshots/day18/job-processed.png
 
 3. Terminal showing "Application is shutting down..." with clean exit
-Screenshot Link:
+Screenshot Link: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day18/Screenshots/day18/graceful-shutdown.png
+
+CI Run :
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27195527108/job/80286034637
