@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
+using QuotesApi.ServiceBus;
 using QuotesApi.Data;
 using QuotesApi.DTOs;
 using QuotesApi.Models;
@@ -47,10 +48,11 @@ public static class EndpointExtensions
         // Validation is now in the aggregate — the endpoint just calls Create.
         // QuoteDomainException bubbles up to the exception middleware.
         group.MapPost("/", async (
-            CreateQuoteRequest request,
-            IQuoteRepository   repo,
-            QuoteJobQueue      jobQueue,
-            CancellationToken  ct) =>
+            CreateQuoteRequest    request,
+            IQuoteRepository      repo,
+            QuoteJobQueue         jobQueue,
+            QuoteCreatedPublisher publisher,
+            CancellationToken     ct) =>
         {
             // Quote.Create enforces all invariants — no manual validation here.
             // If author or text are invalid, QuoteDomainException is thrown
@@ -58,9 +60,11 @@ public static class EndpointExtensions
             var quote   = Quote.Create(request.Author, request.Text);
             var created = await repo.CreateAsync(quote, ct);
 
-            // Enqueue slow post-creation work (email, indexing, analytics).
-            // Non-blocking — the response returns immediately while the worker picks it up.
+            // Day 18 — in-process background job
             jobQueue.Enqueue(created.Id);
+
+            // Day 19 — publish to Service Bus topic (email-sub + analytics-sub both receive it)
+            await publisher.PublishAsync(created.Id, created.Author, ct);
 
             return Results.Created(
                 $"/api/quotes/{created.Id}",

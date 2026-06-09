@@ -1,0 +1,144 @@
+Day 19 — Azure Service Bus Topics + DLQ
+========================================
+
+PUBLISHER
+---------
+public class QuoteCreatedPublisher
+{
+    private readonly ServiceBusSender _sender;
+
+    public QuoteCreatedPublisher(ServiceBusClient client, IConfiguration config)
+    {
+        _sender = client.CreateSender(config["ServiceBus:TopicName"]);
+    }
+
+    public async Task PublishAsync(int quoteId, string author, CancellationToken ct)
+    {
+        var payload = JsonSerializer.Serialize(new { quoteId, author });
+
+        var message = new ServiceBusMessage(payload)
+        {
+            MessageId   = $"quote-created-{quoteId}",
+            ContentType = "application/json",
+            Subject     = "quote.created"
+        };
+
+        await _sender.SendMessageAsync(message, ct);
+    }
+}
+
+CONSUMER
+--------
+public class QuoteCreatedConsumer : BackgroundService
+{
+    private readonly ServiceBusProcessor _emailProcessor;
+    private readonly ServiceBusProcessor _analyticsProcessor;
+    private readonly ILogger<QuoteCreatedConsumer> _logger;
+
+    private readonly ConcurrentDictionary<string, bool> _processed = new();
+
+    public QuoteCreatedConsumer(ServiceBusClient client, IConfiguration config, ILogger<QuoteCreatedConsumer> logger)
+    {
+        var topic        = config["ServiceBus:TopicName"]!;
+        _emailProcessor     = client.CreateProcessor(topic, config["ServiceBus:EmailSubscription"]!);
+        _analyticsProcessor = client.CreateProcessor(topic, config["ServiceBus:AnalyticsSubscription"]!);
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _emailProcessor.ProcessMessageAsync     += OnEmailMessageAsync;
+        _emailProcessor.ProcessErrorAsync       += OnErrorAsync;
+        _analyticsProcessor.ProcessMessageAsync += OnAnalyticsMessageAsync;
+        _analyticsProcessor.ProcessErrorAsync   += OnErrorAsync;
+
+        await _emailProcessor.StartProcessingAsync(stoppingToken);
+        await _analyticsProcessor.StartProcessingAsync(stoppingToken);
+
+        _logger.LogInformation("Service Bus consumers started.");
+
+        await Task.Delay(Timeout.Infinite, stoppingToken).ContinueWith(_ => Task.CompletedTask);
+
+        await _emailProcessor.StopProcessingAsync();
+        await _analyticsProcessor.StopProcessingAsync();
+    }
+
+    private async Task OnEmailMessageAsync(ProcessMessageEventArgs args)
+    {
+        var messageId = $"email:{args.Message.MessageId}";
+        if (!_processed.TryAdd(messageId, true))
+        {
+            await args.CompleteMessageAsync(args.Message);
+            return;
+        }
+        var data = JsonSerializer.Deserialize<QuoteCreatedPayload>(args.Message.Body.ToString());
+        _logger.LogInformation("[email-sub] Quote {QuoteId} by {Author} — sending email...", data?.QuoteId, data?.Author);
+        await Task.Delay(500, args.CancellationToken);
+        _logger.LogInformation("[email-sub] Email sent for quote {QuoteId}.", data?.QuoteId);
+        await args.CompleteMessageAsync(args.Message);
+    }
+
+    private async Task OnAnalyticsMessageAsync(ProcessMessageEventArgs args)
+    {
+        var messageId = $"analytics:{args.Message.MessageId}";
+        if (!_processed.TryAdd(messageId, true))
+        {
+            await args.CompleteMessageAsync(args.Message);
+            return;
+        }
+        var data = JsonSerializer.Deserialize<QuoteCreatedPayload>(args.Message.Body.ToString());
+        _logger.LogInformation("[analytics-sub] Quote {QuoteId} by {Author} — logging analytics...", data?.QuoteId, data?.Author);
+        await Task.Delay(200, args.CancellationToken);
+        _logger.LogInformation("[analytics-sub] Analytics logged for quote {QuoteId}.", data?.QuoteId);
+        await args.CompleteMessageAsync(args.Message);
+    }
+
+    private Task OnErrorAsync(ProcessErrorEventArgs args)
+    {
+        _logger.LogError(args.Exception, "Service Bus error on {EntityPath}.", args.EntityPath);
+        return Task.CompletedTask;
+    }
+
+    private record QuoteCreatedPayload(
+        [property: JsonPropertyName("quoteId")] int QuoteId,
+        [property: JsonPropertyName("author")]  string Author);
+}
+
+IDEMPOTENCY KEY HANDLING
+------------------------
+Both processors share one ConcurrentDictionary but keys are prefixed per subscription:
+  "email:{MessageId}"     for email-sub
+  "analytics:{MessageId}" for analytics-sub
+
+Bug (before fix) — bare MessageId key:
+  [WRN] Duplicate message quote-created-525 skipped (analytics-sub).
+  [WRN] Duplicate message quote-created-528 skipped (analytics-sub).
+  analytics-sub saw the same MessageId already added by email-sub and skipped the message.
+  See: idempotency-bug.png
+
+Fix — scoped key per subscription:
+  Both subs process every message independently with no skip warning.
+  See: normal-flow.png (quote 529 by Albus Dumbledore processed by both subs)
+
+On duplicate: CompleteMessageAsync removes it from the queue but skips business logic.
+
+PROOF — POISON MESSAGE LANDED IN DLQ
+--------------------------------------
+PoisonMessageDemo listened on analytics-sub and always threw InvalidOperationException.
+Max delivery count was set to 3 in Azure Portal.
+
+Terminal logs (quote-created-527):
+  [poison-demo] Delivery 1 — always throwing to trigger DLQ.
+  [poison-demo] Delivery 2 — always throwing to trigger DLQ.
+  [poison-demo] Delivery 3 — always throwing to trigger DLQ.
+
+Azure Portal — analytics-sub — Dead-letter: 2 MESSAGES
+Service Bus Explorer — selected message body: {"quoteId":527,"author":"Poison Test"}
+
+Screenshots:
+  topics-subs.png            — quote-created topic with both subscriptions, analytics-sub Dead-letter=1
+  dlq-count.png              — analytics-sub Dead-letter = 2 MESSAGES, Max delivery count = 3
+  dlq-message-body.png       — Service Bus Explorer showing {"quoteId":527,"author":"Poison Test"} in DLQ
+  poison-demo-deliveries.png — terminal: Delivery 1-3 then dead-lettered
+  idempotency-bug.png        — terminal: analytics-sub skipping messages due to shared bare key (before fix)
+  normal-flow.png            — terminal: both subs processing quote 529 independently after fix

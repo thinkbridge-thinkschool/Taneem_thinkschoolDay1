@@ -13,12 +13,14 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
 using QuotesApi.Authorization;
+using Azure.Messaging.ServiceBus;
 using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
 using QuotesApi.Data;
 using QuotesApi.Queries;
 using QuotesApi.Options;
 using QuotesApi.Repositories;
+using QuotesApi.ServiceBus;
 using QuotesApi.Services;
 
 namespace QuotesApi.Extensions;
@@ -111,6 +113,11 @@ public static class ServiceExtensions
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
+
+        // Service Bus — Day 19
+        services.AddSingleton(new ServiceBusClient(configuration["ServiceBus:ConnectionString"]));
+        services.AddSingleton<QuoteCreatedPublisher>();
+        services.AddHostedService<QuoteCreatedConsumer>();
 
         // Background jobs — Day 18
         // Singleton queue shared between the API (writer) and the worker (reader).
