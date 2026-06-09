@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
 using QuotesApi.Data;
 using QuotesApi.DTOs;
@@ -48,6 +49,7 @@ public static class EndpointExtensions
         group.MapPost("/", async (
             CreateQuoteRequest request,
             IQuoteRepository   repo,
+            QuoteJobQueue      jobQueue,
             CancellationToken  ct) =>
         {
             // Quote.Create enforces all invariants — no manual validation here.
@@ -55,6 +57,10 @@ public static class EndpointExtensions
             // and caught by the middleware which returns 422.
             var quote   = Quote.Create(request.Author, request.Text);
             var created = await repo.CreateAsync(quote, ct);
+
+            // Enqueue slow post-creation work (email, indexing, analytics).
+            // Non-blocking — the response returns immediately while the worker picks it up.
+            jobQueue.Enqueue(created.Id);
 
             return Results.Created(
                 $"/api/quotes/{created.Id}",
@@ -75,10 +81,37 @@ public static class EndpointExtensions
                 : Results.NotFound();
         }).RequireAuthorization("can-delete-quotes");
 
+        // ── GET /api/quotes/count ────────────────────────────────────────
+        group.MapGet("/count", async (AppDbContext db, CancellationToken ct) =>
+        {
+            var count = await db.Quotes.CountAsync(q => !q.IsDeleted, ct);
+            return Results.Ok(new { count });
+        });
+
+        // ── GET /api/quotes/author-stats ─────────────────────────────────
+        // Returns all distinct authors matching the prefix with their quote counts.
+        // Used to populate chips independently of pagination.
+        group.MapGet("/author-stats", async (string? search, AppDbContext db, CancellationToken ct) =>
+        {
+            var query = db.Quotes.Where(q => !q.IsDeleted);
+            if (!string.IsNullOrWhiteSpace(search))
+                query = query.Where(q => q.Author.StartsWith(search));
+
+            var stats = await query
+                .GroupBy(q => q.Author)
+                .Select(g => new { author = g.Key, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .ToListAsync(ct);
+
+            return Results.Ok(stats);
+        });
+
         // ── GET /api/quotes/summary ── CQRS read model ───────────────────
         group.MapGet("/summary", async (
             int page,
             int size,
+            string? search,
+            bool? exactAuthor,
             GetQuotesSummaryHandler handler,
             CancellationToken ct) =>
         {
@@ -86,7 +119,7 @@ public static class EndpointExtensions
             size = size <= 0 ? 10 : size;
 
             var results = await handler.HandleAsync(
-                new GetQuotesSummaryQuery(page, size), ct);
+                new GetQuotesSummaryQuery(page, size, search, exactAuthor ?? false), ct);
 
             return Results.Ok(results);
         });
@@ -130,6 +163,7 @@ public static class EndpointExtensions
             return Results.Ok(result);
         });
 
+    
         // ── GET /api/quotes/slow ──────────────────────────────────────────
         // Deliberately bad: N+1 queries + no index on Author column.
         // Used for Day 11 profiling exercise only — not for production use.

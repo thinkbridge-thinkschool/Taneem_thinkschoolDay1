@@ -1,0 +1,147 @@
+Day 18 — Background Jobs
+=========================
+
+## BackgroundJobs/QuoteJobQueue.cs
+
+using System.Threading.Channels;
+
+namespace QuotesApi.BackgroundJobs;
+
+// Thread-safe in-memory queue backed by System.Threading.Channels.
+// The API writes quoteIds in; the worker reads them out.
+// Unbounded = never blocks the writer — safe for fire-and-forget from endpoints.
+public class QuoteJobQueue
+{
+    private readonly Channel<int> _channel = Channel.CreateUnbounded<int>();
+
+    public void Enqueue(int quoteId) => _channel.Writer.TryWrite(quoteId);
+
+    public IAsyncEnumerable<int> ReadAllAsync(CancellationToken ct)
+        => _channel.Reader.ReadAllAsync(ct);
+}
+
+---
+
+## BackgroundJobs/QuoteProcessingWorker.cs
+
+namespace QuotesApi.BackgroundJobs;
+
+// BackgroundService runs for the lifetime of the app on its own thread.
+// ExecuteAsync is called once on startup and must return when stoppingToken fires.
+public class QuoteProcessingWorker : BackgroundService
+{
+    private readonly QuoteJobQueue _queue;
+    private readonly ILogger<QuoteProcessingWorker> _logger;
+
+    public QuoteProcessingWorker(QuoteJobQueue queue, ILogger<QuoteProcessingWorker> logger)
+    {
+        _queue  = queue;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Quote processing worker started.");
+
+        // ReadAllAsync yields each item as it arrives and exits cleanly
+        // when stoppingToken is cancelled — this is the graceful shutdown hook.
+        await foreach (var quoteId in _queue.ReadAllAsync(stoppingToken))
+        {
+            try
+            {
+                await ProcessAsync(quoteId, stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Log and continue — one failed job must not kill the whole worker.
+                _logger.LogError(ex, "Failed to process quote {QuoteId}.", quoteId);
+            }
+        }
+
+        _logger.LogInformation("Quote processing worker stopped.");
+    }
+
+    private async Task ProcessAsync(int quoteId, CancellationToken ct)
+    {
+        _logger.LogInformation("Processing quote {QuoteId}…", quoteId);
+
+        // Simulate slow off-thread work: email, search index, event publishing.
+        await Task.Delay(2000, ct);
+
+        _logger.LogInformation("Quote {QuoteId} processed.", quoteId);
+    }
+}
+
+---
+
+## Registration (Extensions/ServiceExtensions.cs)
+
+// Singleton queue shared between API (writer) and worker (reader).
+services.AddSingleton<QuoteJobQueue>();
+services.AddHostedService<QuoteProcessingWorker>();
+
+---
+
+## Enqueue call (Extensions/QuoteEndpointExtensions.cs — POST endpoint)
+
+group.MapPost("/", async (
+    CreateQuoteRequest request,
+    IQuoteRepository   repo,
+    QuoteJobQueue      jobQueue,
+    CancellationToken  ct) =>
+{
+    var quote   = Quote.Create(request.Author, request.Text);
+    var created = await repo.CreateAsync(quote, ct);
+
+    // Fire-and-forget — POST returns 201 immediately, worker picks this up async.
+    jobQueue.Enqueue(created.Id);
+
+    return Results.Created($"/api/quotes/{created.Id}", ToResponse(created));
+}).RequireAuthorization("can-write-quotes");
+
+---
+
+## Key Concepts
+
+Graceful shutdown:
+  ExecuteAsync awaits ReadAllAsync(stoppingToken). When Ctrl+C is pressed,
+  ASP.NET cancels stoppingToken, ReadAllAsync exits, the foreach completes,
+  ExecuteAsync returns — no hanging threads, no mid-process data loss.
+
+BackgroundService vs IHostedService:
+  BackgroundService IS IHostedService — a base class that implements
+  StartAsync/StopAsync and calls ExecuteAsync. Use raw IHostedService only
+  when you need custom start/stop logic (e.g. a TCP listener). For queue
+  draining always use BackgroundService.
+
+When Hangfire over a hosted service:
+Use Hangfire when jobs must survive a crash — it saves
+jobs to the database so they're not lost if the 
+app restarts. Our in-memory queue loses everything on shutdown.
+
+---
+
+## Verification
+
+Worker started:
+  [13:56:12 INF] QuotesApi.BackgroundJobs.QuoteProcessingWorker Quote processing worker started.
+
+Job processed (POST returned at 14:01:03, job finished 2 seconds later):
+  [14:01:03 INF] QuoteProcessingWorker Processing quote 523...
+  [14:01:05 INF] QuoteProcessingWorker Quote 523 processed.
+
+Graceful shutdown (Ctrl+C):
+  [14:04:16 INF] Microsoft.Hosting.Lifetime Application is shutting down...
+  — no errors, worker exited cleanly via stoppingToken cancellation
+
+---
+
+## Screenshots to take
+1. Terminal showing "Quote processing worker started."
+Screenshot Link:
+
+2. Terminal showing "Processing quote 523..." and "Quote 523 processed." (2s apart)
+Screenshot Link:
+
+3. Terminal showing "Application is shutting down..." with clean exit
+Screenshot Link:
