@@ -48,11 +48,11 @@ public static class EndpointExtensions
         // Validation is now in the aggregate — the endpoint just calls Create.
         // QuoteDomainException bubbles up to the exception middleware.
         group.MapPost("/", async (
-            CreateQuoteRequest    request,
-            IQuoteRepository      repo,
-            QuoteJobQueue         jobQueue,
-            QuoteCreatedPublisher publisher,
-            CancellationToken     ct) =>
+            CreateQuoteRequest     request,
+            IQuoteRepository       repo,
+            QuoteJobQueue          jobQueue,
+            QuoteCreatedPublisher? publisher,   // null when Service Bus is not configured
+            CancellationToken      ct) =>
         {
             // Quote.Create enforces all invariants — no manual validation here.
             // If author or text are invalid, QuoteDomainException is thrown
@@ -64,7 +64,8 @@ public static class EndpointExtensions
             jobQueue.Enqueue(created.Id);
 
             // Day 19 — publish to Service Bus topic (email-sub + analytics-sub both receive it)
-            await publisher.PublishAsync(created.Id, created.Author, ct);
+            if (publisher is not null)
+                await publisher.PublishAsync(created.Id, created.Author, ct);
 
             return Results.Created(
                 $"/api/quotes/{created.Id}",
