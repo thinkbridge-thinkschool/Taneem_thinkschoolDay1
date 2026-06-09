@@ -13,6 +13,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
 using QuotesApi.Authorization;
+using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
 using QuotesApi.Data;
 using QuotesApi.Queries;
@@ -35,7 +36,8 @@ public static class ServiceExtensions
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
 
         services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("Default")));
+            options.UseSqlServer(configuration.GetConnectionString("Default"),
+                sql => sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
 
         var otlpEndpoint = configuration["OpenTelemetry:Endpoint"] ?? "http://localhost:4317";
 
@@ -109,6 +111,12 @@ public static class ServiceExtensions
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
+
+        // Background jobs — Day 18
+        // Singleton queue shared between the API (writer) and the worker (reader).
+        // AddHostedService registers the worker for the app's lifetime.
+        services.AddSingleton<QuoteJobQueue>();
+        services.AddHostedService<QuoteProcessingWorker>();
 
         // CQRS-lite handlers
         services.AddScoped<CreateQuoteHandler>();
