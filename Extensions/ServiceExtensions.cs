@@ -121,8 +121,11 @@ public static class ServiceExtensions
             services.AddSingleton(new ServiceBusClient(sbConnectionString));
             services.AddHostedService<QuoteCreatedConsumer>();
         }
-        // Always register publisher — no-op when ServiceBusClient is absent
-        services.AddSingleton<QuoteCreatedPublisher>();
+        // Always register publisher via factory — GetService returns null when SB not configured
+        services.AddSingleton<QuoteCreatedPublisher>(sp =>
+            new QuoteCreatedPublisher(
+                sp.GetService<ServiceBusClient>(),
+                sp.GetRequiredService<IConfiguration>()));
 
         // Background jobs — Day 18
         // Singleton queue shared between the API (writer) and the worker (reader).
