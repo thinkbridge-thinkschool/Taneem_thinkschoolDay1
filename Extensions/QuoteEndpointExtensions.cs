@@ -51,21 +51,14 @@ public static class EndpointExtensions
             CreateQuoteRequest     request,
             IQuoteRepository       repo,
             QuoteJobQueue          jobQueue,
-            QuoteCreatedPublisher? publisher,   // null when Service Bus is not configured
-            CancellationToken      ct) =>
+            QuoteCreatedPublisher publisher,
+            CancellationToken     ct) =>
         {
-            // Quote.Create enforces all invariants — no manual validation here.
-            // If author or text are invalid, QuoteDomainException is thrown
-            // and caught by the middleware which returns 422.
             var quote   = Quote.Create(request.Author, request.Text);
             var created = await repo.CreateAsync(quote, ct);
 
-            // Day 18 — in-process background job
             jobQueue.Enqueue(created.Id);
-
-            // Day 19 — publish to Service Bus topic (email-sub + analytics-sub both receive it)
-            if (publisher is not null)
-                await publisher.PublishAsync(created.Id, created.Author, ct);
+            await publisher.PublishAsync(created.Id, created.Author, ct);
 
             return Results.Created(
                 $"/api/quotes/{created.Id}",

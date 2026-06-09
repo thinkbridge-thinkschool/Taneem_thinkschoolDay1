@@ -115,14 +115,14 @@ public static class ServiceExtensions
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
 
         // Service Bus — Day 19
-        // Guard: skip registration when connection string is absent (tests, local dev without SB).
         var sbConnectionString = configuration["ServiceBus:ConnectionString"];
         if (!string.IsNullOrWhiteSpace(sbConnectionString))
         {
             services.AddSingleton(new ServiceBusClient(sbConnectionString));
-            services.AddSingleton<QuoteCreatedPublisher>();
             services.AddHostedService<QuoteCreatedConsumer>();
         }
+        // Always register publisher — no-op when ServiceBusClient is absent
+        services.AddSingleton<QuoteCreatedPublisher>();
 
         // Background jobs — Day 18
         // Singleton queue shared between the API (writer) and the worker (reader).
