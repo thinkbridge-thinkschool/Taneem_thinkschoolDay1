@@ -61,6 +61,9 @@ public sealed class Quote
         if (trimmed.Length > 200)
             throw new QuoteAuthorInvalidException(
                 $"Author must be 200 characters or fewer (got {trimmed.Length}).");
+
+        if (trimmed.Any(char.IsDigit))
+            throw new QuoteAuthorInvalidException("Author name cannot contain numbers.");
     }
 
     private static void ValidateText(string text)
