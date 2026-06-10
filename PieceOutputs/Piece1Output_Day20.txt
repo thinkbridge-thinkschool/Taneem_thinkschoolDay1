@@ -89,8 +89,8 @@ NORMAL FLOW — TESTED (quote 530)
   [11:09:39] [email-sub] Quote 530 by Outbox Test — sending email…
   [11:09:40] OutboxRelay sent message 1 (quote.created)
 
-  Atomic write:   Screenshots/day20/Piece20Output_outbox-write.png
-  Relay publish:  Screenshots/day20/Piece20Output_outbox-relay.png
+  Atomic write:   https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/outbox-write.png
+  Relay publish:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/outbox-relay.png
 
 CRASH SCENARIO — TESTED (quote 531)
 -------------------------------------
@@ -101,7 +101,7 @@ Step 2: App killed at 11:35:03 — relay found the unsent row but never publishe
   [11:35:02] INSERT INTO [OutboxMessages]   ← SentAt = null
   [11:35:03] OutboxRelay processing 1 unsent message(s).
   [11:35:03] Application is shutting down...  ← killed here
-  Screenshot: Screenshots/day20/Piece20Output_crash.png
+  Screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-crash.png
 
 Step 3: App restarted at 11:39:53 — relay found the same unsent row on first poll
 
@@ -111,7 +111,9 @@ Step 3: App restarted at 11:39:53 — relay found the same unsent row on first p
   [11:39:56] [analytics-sub] Quote 531 by Crash Test — logging analytics…
   [11:39:56] UPDATE [OutboxMessages] SET [SentAt]
   [11:39:56] OutboxRelay sent message 2 (quote.created)
-  Screenshot: Screenshots/day20/Piece20Output_recovery.png
+  Screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery1.png
+              https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery2.png
+
 
 No message was lost. The quote was in the DB the whole time. The relay just
 needed to restart to pick up the unsent row.
@@ -123,7 +125,7 @@ The consumer received it a second time at 11:39:57:
 
   [11:39:57 WRN] Duplicate message analytics:2 skipped (analytics-sub).
   [11:39:57 WRN] Duplicate message email:2 skipped (email-sub).
-  Screenshot: Screenshots/day20/Piece20Output_recovery.png
+  Screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery2.png
 
 The consumer's ConcurrentDictionary keyed by "analytics:{MessageId}" and
 "email:{MessageId}" (fixed in Day 19) blocked the duplicate from being processed.
@@ -131,3 +133,6 @@ No double email. No double analytics entry.
 
 The relay uses msg.Id.ToString() as the Service Bus MessageId — the same outbox
 row always produces the same MessageId, so deduplication works correctly.
+
+CI run:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27259240205/job/80500679058
