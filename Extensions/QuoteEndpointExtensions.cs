@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
-using QuotesApi.ServiceBus;
 using QuotesApi.Data;
 using QuotesApi.DTOs;
 using QuotesApi.Models;
 using QuotesApi.Queries;
 using QuotesApi.Repositories;
+using System.Text.Json;
 
 namespace QuotesApi.Extensions;
 
@@ -45,24 +45,39 @@ public static class EndpointExtensions
         });
 
         // ── POST /api/quotes ──────────────────────────────────────────────
-        // Validation is now in the aggregate — the endpoint just calls Create.
-        // QuoteDomainException bubbles up to the exception middleware.
         group.MapPost("/", async (
-            CreateQuoteRequest     request,
-            IQuoteRepository       repo,
-            QuoteJobQueue          jobQueue,
-            QuoteCreatedPublisher publisher,
-            CancellationToken     ct) =>
+            CreateQuoteRequest request,
+            AppDbContext       db,
+            QuoteJobQueue      jobQueue,
+            CancellationToken  ct) =>
         {
-            var quote   = Quote.Create(request.Author, request.Text);
-            var created = await repo.CreateAsync(quote, ct);
+            var quote = Quote.Create(request.Author, request.Text);
 
-            jobQueue.Enqueue(created.Id);
-            await publisher.PublishAsync(created.Id, created.Author, ct);
+            // Outbox pattern: save quote + outbox row in one transaction.
+            // ExecuteAsync is required because EnableRetryOnFailure blocks user-initiated
+            // transactions unless wrapped in the execution strategy.
+            var strategy = db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-            return Results.Created(
-                $"/api/quotes/{created.Id}",
-                ToResponse(created));
+                db.Quotes.Add(quote);
+                await db.SaveChangesAsync(ct); // quote gets its Id here
+
+                db.OutboxMessages.Add(new OutboxMessage
+                {
+                    EventType = "quote.created",
+                    Payload   = JsonSerializer.Serialize(new { quoteId = quote.Id, author = quote.Author }),
+                    CreatedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync(ct);
+
+                await tx.CommitAsync(ct);
+            });
+
+            jobQueue.Enqueue(quote.Id);
+
+            return Results.Created($"/api/quotes/{quote.Id}", ToResponse(quote));
         }).RequireAuthorization("can-write-quotes");
 
         // ── DELETE /api/quotes/{id} ───────────────────────────────────────

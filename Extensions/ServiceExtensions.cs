@@ -127,6 +127,9 @@ public static class ServiceExtensions
                 sp.GetService<ServiceBusClient>(),
                 sp.GetRequiredService<IConfiguration>()));
 
+        // Outbox relay — Day 20
+        services.AddHostedService<OutboxRelay>();
+
         // Background jobs — Day 18
         // Singleton queue shared between the API (writer) and the worker (reader).
         // AddHostedService registers the worker for the app's lifetime.

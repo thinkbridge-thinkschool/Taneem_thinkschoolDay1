@@ -14,17 +14,16 @@ public class QuoteCreatedPublisher
             _sender = client.CreateSender(topicName);
     }
 
-    public async Task PublishAsync(int quoteId, string author, CancellationToken ct)
+    // Called by OutboxRelay — publishes a raw payload already serialised into the outbox
+    public async Task PublishRawAsync(string eventType, string payload, string messageId, CancellationToken ct)
     {
         if (_sender is null) return;
 
-        var payload = JsonSerializer.Serialize(new { quoteId, author });
-
         var message = new ServiceBusMessage(payload)
         {
-            MessageId   = $"quote-created-{quoteId}",
+            MessageId   = messageId,
             ContentType = "application/json",
-            Subject     = "quote.created"
+            Subject     = eventType
         };
 
         await _sender.SendMessageAsync(message, ct);
