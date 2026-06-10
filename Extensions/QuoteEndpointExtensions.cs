@@ -59,7 +59,10 @@ public static class EndpointExtensions
             var strategy = db.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
             {
-                await using var tx = await db.Database.BeginTransactionAsync(ct);
+                // InMemory provider (used in tests) does not support transactions.
+                await using var tx = db.Database.IsRelational()
+                    ? await db.Database.BeginTransactionAsync(ct)
+                    : null;
 
                 db.Quotes.Add(quote);
                 await db.SaveChangesAsync(ct); // quote gets its Id here
@@ -72,7 +75,7 @@ public static class EndpointExtensions
                 });
                 await db.SaveChangesAsync(ct);
 
-                await tx.CommitAsync(ct);
+                if (tx != null) await tx.CommitAsync(ct);
             });
 
             jobQueue.Enqueue(quote.Id);
