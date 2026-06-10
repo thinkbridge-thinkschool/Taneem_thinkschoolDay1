@@ -30,26 +30,33 @@ public class OutboxRelay : BackgroundService
 
     private async Task ProcessBatchAsync(CancellationToken ct)
     {
-        await using var scope     = _scopeFactory.CreateAsyncScope();
-        var db                    = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var publisher             = scope.ServiceProvider.GetRequiredService<QuoteCreatedPublisher>();
-
-        var unsent = await db.OutboxMessages
-            .Where(m => m.SentAt == null)
-            .OrderBy(m => m.CreatedAt)
-            .Take(10)
-            .ToListAsync(ct);
-
-        if (unsent.Count == 0) return;
-
-        _logger.LogInformation("OutboxRelay processing {Count} unsent message(s).", unsent.Count);
-
-        foreach (var msg in unsent)
+        try
         {
-            await publisher.PublishRawAsync(msg.EventType, msg.Payload, msg.Id.ToString(), ct);
-            msg.SentAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(ct);
-            _logger.LogInformation("OutboxRelay sent message {Id} ({EventType}).", msg.Id, msg.EventType);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var db        = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var publisher = scope.ServiceProvider.GetRequiredService<QuoteCreatedPublisher>();
+
+            var unsent = await db.OutboxMessages
+                .Where(m => m.SentAt == null)
+                .OrderBy(m => m.CreatedAt)
+                .Take(10)
+                .ToListAsync(ct);
+
+            if (unsent.Count == 0) return;
+
+            _logger.LogInformation("OutboxRelay processing {Count} unsent message(s).", unsent.Count);
+
+            foreach (var msg in unsent)
+            {
+                await publisher.PublishRawAsync(msg.EventType, msg.Payload, msg.Id.ToString(), ct);
+                msg.SentAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+                _logger.LogInformation("OutboxRelay sent message {Id} ({EventType}).", msg.Id, msg.EventType);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "OutboxRelay batch failed — will retry next cycle.");
         }
     }
 }
