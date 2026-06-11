@@ -78,3 +78,6 @@ queues the other 49, and serves them all from the single result.
 
   DB log screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/stampede-protection.png
   k6 screenshot:      https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/k6stampede-protection.png
+
+CI run:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27329864538/job/80739392451
