@@ -12,14 +12,18 @@ public class GetQuotesSummaryHandler
     public async Task<List<QuoteSummaryReadModel>> HandleAsync(
         GetQuotesSummaryQuery query, CancellationToken ct)
     {
+        var baseQuery = _db.Quotes.Where(q => !q.IsDeleted);
+        if (query.CurrentUserId.HasValue)
+            baseQuery = baseQuery.Where(q => q.CreatedByUserId == query.CurrentUserId.Value);
+
         // ── Chip click: all quotes by exact author, paginated ──────────────
         if (!string.IsNullOrWhiteSpace(query.Search) && query.ExactAuthor)
         {
-            var total = await _db.Quotes
-                .CountAsync(q => !q.IsDeleted && q.Author == query.Search, ct);
+            var total = await baseQuery
+                .CountAsync(q => q.Author == query.Search, ct);
 
-            var exactRows = await _db.Quotes
-                .Where(q => !q.IsDeleted && q.Author == query.Search)
+            var exactRows = await baseQuery
+                .Where(q => q.Author == query.Search)
                 .OrderBy(q => q.Id)
                 .Skip((query.Page - 1) * query.Size)
                 .Take(query.Size)
@@ -36,12 +40,10 @@ public class GetQuotesSummaryHandler
         }
 
         // ── Typing search: ALL matching quotes, ordered by author then id ──
-        // Chips show total count per author (QuoteCount subquery).
-        // StartsWith → LIKE 'term%' — uses the Author index.
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var searchRows = await _db.Quotes
-                .Where(q => !q.IsDeleted && q.Author.StartsWith(query.Search))
+            var searchRows = await baseQuery
+                .Where(q => q.Author.StartsWith(query.Search))
                 .OrderBy(q => q.Author)
                 .ThenBy(q => q.Id)
                 .Skip((query.Page - 1) * query.Size)
@@ -63,9 +65,8 @@ public class GetQuotesSummaryHandler
             )).ToList();
         }
 
-        // ── Browse mode: all quotes ordered by insertion ───────────────────
-        var rows = await _db.Quotes
-            .Where(q => !q.IsDeleted)
+        // ── Browse mode ────────────────────────────────────────────────────
+        var rows = await baseQuery
             .OrderBy(q => q.Id)
             .Skip((query.Page - 1) * query.Size)
             .Take(query.Size)

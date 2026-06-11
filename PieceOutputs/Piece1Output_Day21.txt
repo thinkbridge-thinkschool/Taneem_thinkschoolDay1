@@ -51,8 +51,8 @@ Before: every one of the 701 requests fired a SELECT against the DB.
 After:  DB queried once on cold start, then 159,000+ requests served from L1/L2.
 Hit rate ≈ 99.9% — DB load dropped from 46 queries/s to near zero.
 
-  Before screenshot: Screenshots/day21/before.png
-  After screenshot:  Screenshots/day21/after.png
+  Before screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/before.png
+  After screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/after.png
 
 STAMPEDE PROTECTION — TESTED
 ------------------------------
@@ -76,5 +76,5 @@ Without stampede protection, 50 concurrent cache misses would fan out to
 50 identical DB queries. HybridCache lets only the first request through,
 queues the other 49, and serves them all from the single result.
 
-  DB log screenshot:  Screenshots/day21/stampede-protection.png
-  k6 screenshot:      Screenshots/day21/k6stampede-protection.png
+  DB log screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/stampede-protection.png
+  k6 screenshot:      https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/k6stampede-protection.png
