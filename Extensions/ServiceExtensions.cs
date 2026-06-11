@@ -13,11 +13,14 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
 using QuotesApi.Authorization;
+using Azure.Messaging.ServiceBus;
+using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
 using QuotesApi.Data;
 using QuotesApi.Queries;
 using QuotesApi.Options;
 using QuotesApi.Repositories;
+using QuotesApi.ServiceBus;
 using QuotesApi.Services;
 
 namespace QuotesApi.Extensions;
@@ -35,7 +38,8 @@ public static class ServiceExtensions
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
 
         services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("Default")));
+            options.UseSqlServer(configuration.GetConnectionString("Default"),
+                sql => sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
 
         var otlpEndpoint = configuration["OpenTelemetry:Endpoint"] ?? "http://localhost:4317";
 
@@ -109,6 +113,33 @@ public static class ServiceExtensions
         services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IAuthorizationHandler, OwnQuoteHandler>();
+
+        // Service Bus — Day 19
+        var sbConnectionString = configuration["ServiceBus:ConnectionString"];
+        if (!string.IsNullOrWhiteSpace(sbConnectionString))
+        {
+            services.AddSingleton(new ServiceBusClient(sbConnectionString));
+            services.AddHostedService<QuoteCreatedConsumer>();
+        }
+        // Always register publisher via factory — GetService returns null when SB not configured
+        services.AddSingleton<QuoteCreatedPublisher>(sp =>
+            new QuoteCreatedPublisher(
+                sp.GetService<ServiceBusClient>(),
+                sp.GetRequiredService<IConfiguration>()));
+
+        // Outbox relay — Day 20
+        services.AddHostedService<OutboxRelay>();
+
+        // HybridCache — Day 21 (L1 in-memory + L2 Redis)
+        services.AddStackExchangeRedisCache(options =>
+            options.Configuration = configuration["Redis:ConnectionString"] ?? "localhost:6379");
+        services.AddHybridCache();
+
+        // Background jobs — Day 18
+        // Singleton queue shared between the API (writer) and the worker (reader).
+        // AddHostedService registers the worker for the app's lifetime.
+        services.AddSingleton<QuoteJobQueue>();
+        services.AddHostedService<QuoteProcessingWorker>();
 
         // CQRS-lite handlers
         services.AddScoped<CreateQuoteHandler>();
