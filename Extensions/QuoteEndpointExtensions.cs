@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using QuotesApi.BackgroundJobs;
 using QuotesApi.Commands;
 using QuotesApi.Data;
@@ -6,6 +7,7 @@ using QuotesApi.DTOs;
 using QuotesApi.Models;
 using QuotesApi.Queries;
 using QuotesApi.Repositories;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace QuotesApi.Extensions;
@@ -22,26 +24,40 @@ public static class EndpointExtensions
             int page,
             int size,
             IQuoteRepository repo,
+            HybridCache cache,
             CancellationToken ct) =>
         {
             page = page <= 0 ? 1 : page;
             size = size <= 0 ? 10 : size;
 
-            var quotes = await repo.GetPagedAsync(page, size, ct);
-            return Results.Ok(quotes.Select(ToResponse));
+            var key    = $"quotes:page={page}:size={size}";
+            var quotes = await cache.GetOrCreateAsync(
+                key,
+                async cancel => (await repo.GetPagedAsync(page, size, cancel))
+                                .Select(ToResponse).ToList(),
+                new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(30) },
+                cancellationToken: ct);
+
+            return Results.Ok(quotes);
         });
 
         // ── GET /api/quotes/{id} ──────────────────────────────────────────
         group.MapGet("/{id:int}", async (
             int id,
             IQuoteRepository repo,
+            ClaimsPrincipal  user,
             CancellationToken ct) =>
         {
             var quote = await repo.GetByIdAsync(id, ct);
+            if (quote is null) return Results.NotFound();
 
-            return quote is null
-                ? Results.NotFound()
-                : Results.Ok(ToResponse(quote));
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var isAdmin     = user.HasClaim("role", "admin");
+            var canDelete   = int.TryParse(userIdClaim, out var userId)
+                              && (quote.CreatedByUserId == userId || isAdmin);
+
+            return Results.Ok(new QuoteDetailResponse(
+                quote.Id, quote.Author, quote.Text, canDelete));
         });
 
         // ── POST /api/quotes ──────────────────────────────────────────────
@@ -49,9 +65,12 @@ public static class EndpointExtensions
             CreateQuoteRequest request,
             AppDbContext       db,
             QuoteJobQueue      jobQueue,
+            ClaimsPrincipal    user,
             CancellationToken  ct) =>
         {
-            var quote = Quote.Create(request.Author, request.Text);
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            int.TryParse(userIdClaim, out var createdByUserId);
+            var quote = Quote.Create(request.Author, request.Text, createdByUserId);
 
             // Outbox pattern: save quote + outbox row in one transaction.
             // ExecuteAsync is required because EnableRetryOnFailure blocks user-initiated
@@ -139,6 +158,46 @@ public static class EndpointExtensions
 
             return Results.Ok(results);
         });
+
+        // ── GET /api/quotes/mine/count ────────────────────────────────────
+        group.MapGet("/mine/count", async (
+            ClaimsPrincipal user,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(claim, out var userId))
+                return Results.Unauthorized();
+
+            var count = await db.Quotes
+                .CountAsync(q => !q.IsDeleted && q.CreatedByUserId == userId, ct);
+
+            return Results.Ok(new { count });
+        }).RequireAuthorization();
+
+        // ── GET /api/quotes/mine ──────────────────────────────────────────
+        // Returns only quotes created by the authenticated user.
+        group.MapGet("/mine", async (
+            int page,
+            int size,
+            string? search,
+            bool? exactAuthor,
+            ClaimsPrincipal user,
+            GetQuotesSummaryHandler handler,
+            CancellationToken ct) =>
+        {
+            page = page <= 0 ? 1 : page;
+            size = size <= 0 ? 10 : size;
+
+            var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(claim, out var userId))
+                return Results.Unauthorized();
+
+            var results = await handler.HandleAsync(
+                new GetQuotesSummaryQuery(page, size, search, exactAuthor ?? false, userId), ct);
+
+            return Results.Ok(results);
+        }).RequireAuthorization();
 
         // ── POST /api/quotes/command ── CQRS write model ──────────────────
         group.MapPost("/command", async (

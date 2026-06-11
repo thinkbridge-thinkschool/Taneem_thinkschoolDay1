@@ -130,6 +130,11 @@ public static class ServiceExtensions
         // Outbox relay — Day 20
         services.AddHostedService<OutboxRelay>();
 
+        // HybridCache — Day 21 (L1 in-memory + L2 Redis)
+        services.AddStackExchangeRedisCache(options =>
+            options.Configuration = configuration["Redis:ConnectionString"] ?? "localhost:6379");
+        services.AddHybridCache();
+
         // Background jobs — Day 18
         // Singleton queue shared between the API (writer) and the worker (reader).
         // AddHostedService registers the worker for the app's lifetime.
