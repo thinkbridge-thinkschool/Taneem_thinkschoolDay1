@@ -12,6 +12,7 @@ using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
+using Polly.RateLimiting;
 using QuotesApi.Authorization;
 using Azure.Messaging.ServiceBus;
 using QuotesApi.BackgroundJobs;
@@ -105,6 +106,9 @@ public static class ServiceExtensions
             });
 
             builder.AddTimeout(TimeSpan.FromSeconds(10));
+
+            // Bulkhead — max 10 concurrent calls to external-quotes; excess requests fail fast
+            builder.AddConcurrencyLimiter(permitLimit: 10, queueLimit: 0);
         });
 
         services.AddScoped<IExternalQuoteService, ExternalQuoteService>();
@@ -157,8 +161,8 @@ services.AddAuthorization(options =>
         p.RequireAuthenticatedUser()
          .AddRequirements(new OwnQuoteRequirement()));
 });
-        services
-            .AddAuthentication(options =>
+services
+ .AddAuthentication(options =>
             {
                 options.DefaultScheme          = "Smart";
                 options.DefaultChallengeScheme = "Smart";
