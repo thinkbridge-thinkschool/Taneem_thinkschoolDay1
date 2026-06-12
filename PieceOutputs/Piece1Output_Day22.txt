@@ -63,9 +63,9 @@ After 3 retries exhausted, the circuit breaker counted enough failures
 (FailureRatio ≥ 50%, MinimumThroughput = 3 met) and tripped open.
 
   Retry screenshots:
-  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/retry1.png
-  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/retry2.png
-  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/retry3.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry1.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry2.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry3.png
 
 CIRCUIT BREAKER OPEN — TESTED
 -------------------------------
@@ -82,9 +82,9 @@ Compare: real TCP attempt = ~4100ms. Open circuit rejection = 0.044ms.
 That is a 100,000x difference — the circuit stops wasting time on a dead service.
 
   Circuit open screenshot:
-  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/circuit-open.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/circuit-opened.png
   Instant rejection screenshot:
-  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/instant-rejection.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/instant-rejection.png
 
 HALF-OPEN RECOVERY — TESTED
 -----------------------------
@@ -106,6 +106,8 @@ Full state machine proved: Closed → Open → Half-Open → Closed.
 One successful probe was enough for Polly to fully close the circuit and
 resume normal traffic.
 
-  Half-open screenshot:   https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/half-open.png
-  Circuit closed screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/circuit-closed.png
+  Half-open screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/circuit-half-open.png
+  Circuit closed screenshot:https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/oncircuitclosed.png
 
+  CI run:
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27404335042/job/80989591418
