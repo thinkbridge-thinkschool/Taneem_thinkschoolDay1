@@ -1,0 +1,138 @@
+Day 20 — Transactional Outbox Pattern
+========================================
+
+OUTBOX MESSAGE TABLE
+---------------------
+public class OutboxMessage
+{
+    public int       Id        { get; set; }
+    public string    EventType { get; set; } = string.Empty;
+    public string    Payload   { get; set; } = string.Empty;
+    public DateTime  CreatedAt { get; set; }
+    public DateTime? SentAt    { get; set; }
+}
+
+SentAt = null  → unsent (relay must publish)
+SentAt = value → sent (relay skips)
+
+POST ENDPOINT — ATOMIC WRITE
+------------------------------
+var strategy = db.Database.CreateExecutionStrategy();
+await strategy.ExecuteAsync(async () =>
+{
+    await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+    db.Quotes.Add(quote);
+    await db.SaveChangesAsync(ct);
+
+    db.OutboxMessages.Add(new OutboxMessage
+    {
+        EventType = "quote.created",
+        Payload   = JsonSerializer.Serialize(new { quoteId = quote.Id, author = quote.Author }),
+        CreatedAt = DateTime.UtcNow
+    });
+    await db.SaveChangesAsync(ct);
+
+    await tx.CommitAsync(ct);
+});
+
+ExecuteAsync is required because EnableRetryOnFailure blocks user-initiated
+transactions unless wrapped in the execution strategy.
+
+OUTBOX RELAY
+-------------
+public class OutboxRelay : BackgroundService
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await ProcessBatchAsync(stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken)
+                      .ContinueWith(_ => Task.CompletedTask);
+        }
+    }
+
+    private async Task ProcessBatchAsync(CancellationToken ct)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db        = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var publisher = scope.ServiceProvider.GetRequiredService<QuoteCreatedPublisher>();
+
+        var unsent = await db.OutboxMessages
+            .Where(m => m.SentAt == null)
+            .OrderBy(m => m.CreatedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        foreach (var msg in unsent)
+        {
+            await publisher.PublishRawAsync(msg.EventType, msg.Payload, msg.Id.ToString(), ct);
+            msg.SentAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+    }
+}
+
+IServiceScopeFactory is needed because OutboxRelay is a singleton BackgroundService
+but AppDbContext is scoped — scoped services cannot be injected into singletons directly.
+
+NORMAL FLOW — TESTED (quote 530)
+-----------------------------------
+  [11:09:35] INSERT INTO [Quotes]
+  [11:09:36] INSERT INTO [OutboxMessages]   ← same transaction
+  [11:09:38] OutboxRelay processing 1 unsent message(s).
+  [11:09:39] UPDATE [OutboxMessages] SET [SentAt]
+  [11:09:39] [analytics-sub] Quote 530 by Outbox Test — logging analytics…
+  [11:09:39] [email-sub] Quote 530 by Outbox Test — sending email…
+  [11:09:40] OutboxRelay sent message 1 (quote.created)
+
+  Atomic write:   https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/outbox-write.png
+  Relay publish:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/outbox-relay.png
+
+CRASH SCENARIO — TESTED (quote 531)
+-------------------------------------
+Step 1: POST quote → quote + outbox row written atomically (SentAt = null)
+Step 2: App killed at 11:35:03 — relay found the unsent row but never published it
+
+  [11:35:02] INSERT INTO [Quotes]
+  [11:35:02] INSERT INTO [OutboxMessages]   ← SentAt = null
+  [11:35:03] OutboxRelay processing 1 unsent message(s).
+  [11:35:03] Application is shutting down...  ← killed here
+  Screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-crash.png
+
+Step 3: App restarted at 11:39:53 — relay found the same unsent row on first poll
+
+  [11:39:53] OutboxRelay started.
+  [11:39:53] OutboxRelay processing 1 unsent message(s).  ← recovered from crash
+  [11:39:56] [email-sub] Quote 531 by Crash Test — sending email…
+  [11:39:56] [analytics-sub] Quote 531 by Crash Test — logging analytics…
+  [11:39:56] UPDATE [OutboxMessages] SET [SentAt]
+  [11:39:56] OutboxRelay sent message 2 (quote.created)
+  Screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery1.png
+              https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery2.png
+
+
+No message was lost. The quote was in the DB the whole time. The relay just
+needed to restart to pick up the unsent row.
+
+AT-LEAST-ONCE + IDEMPOTENT CONSUMER
+--------------------------------------
+Service Bus re-delivered the message after the relay published on restart.
+The consumer received it a second time at 11:39:57:
+
+  [11:39:57 WRN] Duplicate message analytics:2 skipped (analytics-sub).
+  [11:39:57 WRN] Duplicate message email:2 skipped (email-sub).
+  Screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day20/Screenshots/day20/output-recovery2.png
+
+The consumer's ConcurrentDictionary keyed by "analytics:{MessageId}" and
+"email:{MessageId}" (fixed in Day 19) blocked the duplicate from being processed.
+No double email. No double analytics entry.
+
+The relay uses msg.Id.ToString() as the Service Bus MessageId — the same outbox
+row always produces the same MessageId, so deduplication works correctly.
+
+CI run:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27259240205/job/80500679058

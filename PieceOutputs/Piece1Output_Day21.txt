@@ -1,0 +1,83 @@
+Day 21 — HybridCache + Stampede Protection
+============================================
+
+CACHE WIRING
+-------------
+// ServiceExtensions.cs — registration
+services.AddStackExchangeRedisCache(options =>
+    options.Configuration = configuration["Redis:ConnectionString"] ?? "localhost:6379");
+services.AddHybridCache();
+
+// GET /api/quotes — endpoint with HybridCache
+group.MapGet("/", async (
+    int page,
+    int size,
+    IQuoteRepository repo,
+    HybridCache cache,
+    CancellationToken ct) =>
+{
+    page = page <= 0 ? 1 : page;
+    size = size <= 0 ? 10 : size;
+
+    var key    = $"quotes:page={page}:size={size}";
+    var quotes = await cache.GetOrCreateAsync(
+        key,
+        async cancel => (await repo.GetPagedAsync(page, size, cancel))
+                        .Select(ToResponse).ToList(),
+        new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(30) },
+        cancellationToken: ct);
+
+    return Results.Ok(quotes);
+});
+
+L1 = in-process memory (microseconds). L2 = Redis (milliseconds, shared across instances).
+HybridCache checks L1 first, then L2, then DB — in that order.
+Cache key includes page and size so different requests get their own entry.
+TTL = 30 seconds. After expiry the next request repopulates both layers.
+
+LOAD TEST — BEFORE vs AFTER
+------------------------------
+Before: GET /api/quotes/summary (no cache) — 20 VUs, 15s
+After:  GET /api/quotes         (HybridCache) — 20 VUs, 15s
+
+  Metric          Before          After           Improvement
+  -------         ------          -----           -----------
+  avg latency     429ms           1.79ms          240x faster
+  p(99)           2.11s           6.5ms           325x faster
+  req/s           46.3            10,670          230x more
+  total served    701             160,069         228x more
+
+Before: every one of the 701 requests fired a SELECT against the DB.
+After:  DB queried once on cold start, then 159,000+ requests served from L1/L2.
+Hit rate ≈ 99.9% — DB load dropped from 46 queries/s to near zero.
+
+  Before screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/before.png
+  After screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/after.png
+
+STAMPEDE PROTECTION — TESTED
+------------------------------
+50 VUs all fired GET /api/quotes?page=1&size=10 simultaneously on a cold cache.
+
+k6 result:
+  avg=859.51ms  min=856.93ms  max=860.96ms  p(99)=860.72ms
+  spread = 4ms across all 50 requests
+
+All 50 responses finished within 4ms of each other — they all waited for
+the same single DB call to complete and received the same cached result.
+
+App log confirmed exactly 1 SELECT against [Quotes] for all 50 requests:
+
+  [12:18:52 INF] QuotesApi.Repositories.QuoteRepository Fetching quotes page 1 size 10
+  [12:18:52 DBG] fb896c1... Executing DbCommand — SELECT [q].[Id], [q].[Author]...
+                 FROM [Quotes] WHERE [q].[IsDeleted] = 0
+  [12:18:53 INF] fb896c1... Executed DbCommand (289ms)
+
+Without stampede protection, 50 concurrent cache misses would fan out to
+50 identical DB queries. HybridCache lets only the first request through,
+queues the other 49, and serves them all from the single result.
+
+  DB log screenshot:  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/stampede-protection.png
+  k6 screenshot:      https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day21/Screenshots/day21/k6stampede-protection.png
+
+CI run:
+https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27329864538/job/80739392451

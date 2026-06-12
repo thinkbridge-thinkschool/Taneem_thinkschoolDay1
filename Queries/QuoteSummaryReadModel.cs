@@ -8,5 +8,6 @@ public record QuoteSummaryReadModel(
     int    Id,
     string Author,
     string AuthorInitials, // e.g. "Marcus Aurelius" → "MA"
-    string ShortText       // first 100 chars for list view
+    string ShortText,      // first 100 chars for list view
+    int    QuoteCount = 0  // total quotes by this author (populated in search mode only)
 );

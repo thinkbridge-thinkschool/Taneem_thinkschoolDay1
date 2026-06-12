@@ -32,7 +32,10 @@ builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
-        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
+        policy.SetIsOriginAllowed(origin => {
+            var host = new Uri(origin).Host;
+            return host == "localhost" || host.EndsWith("azurestaticapps.net");
+        })
               .AllowAnyHeader()
               .AllowAnyMethod()
               .SetPreflightMaxAge(TimeSpan.FromHours(1)));

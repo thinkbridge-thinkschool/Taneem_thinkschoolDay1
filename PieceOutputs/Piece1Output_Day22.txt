@@ -1,0 +1,113 @@
+Day 22 — Resilience with Polly: Retry + Circuit Breaker + Timeout + Bulkhead
+============================================================================
+
+RESILIENCE PIPELINE
+--------------------
+// ServiceExtensions.cs — registered on the "external-quotes" HttpClient
+.AddResilienceHandler("default", (builder, context) =>
+{
+    // 1. Retry — 3 attempts, exponential backoff + jitter
+    builder.AddRetry(new HttpRetryStrategyOptions
+    {
+        MaxRetryAttempts = 3,
+        BackoffType      = DelayBackoffType.Exponential,
+        UseJitter        = true,
+        OnRetry          = args =>
+        {
+            logger.LogWarning(
+                "Retry {Attempt} after {Delay}ms — {Outcome}",
+                args.AttemptNumber + 1,
+                args.RetryDelay.TotalMilliseconds,
+                args.Outcome.Exception?.Message ?? args.Outcome.Result?.StatusCode.ToString());
+            return ValueTask.CompletedTask;
+        }
+    });
+
+    // 2. Circuit Breaker — opens at 50% failure over 30s, stays open 15s
+    builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+    {
+        SamplingDuration  = TimeSpan.FromSeconds(30),
+        FailureRatio      = 0.5,
+        MinimumThroughput = 3,
+        BreakDuration     = TimeSpan.FromSeconds(15),
+        OnOpened = args =>
+        {
+            logger.LogError("Circuit breaker opened for {Duration}s", args.BreakDuration.TotalSeconds);
+            return ValueTask.CompletedTask;
+        }
+    });
+
+    // 3. Timeout — 10s per attempt
+    builder.AddTimeout(TimeSpan.FromSeconds(10));
+
+    // 4. Bulkhead — max 10 concurrent calls; excess fail fast (queue = 0)
+    builder.AddConcurrencyLimiter(permitLimit: 10, queueLimit: 0);
+});
+
+Pipeline order (outer → inner): Retry → Circuit Breaker → Timeout → Bulkhead
+Each layer wraps the next. Retry sees the CB exception and stops retrying
+when the circuit is open (Handled: False). Timeout caps each individual attempt.
+Bulkhead caps total concurrent calls regardless of retries.
+
+RETRIES — TESTED
+-----------------
+Dead URL (localhost:9999) used to simulate a down dependency.
+Each attempt gets an instant TCP connection refused (~4100ms).
+Polly retried 3 times with exponential backoff + jitter:
+
+  [12:08:37 WRN] Retry 1 after 2483ms — No connection could be made (localhost:9999)
+  [12:08:44 WRN] Retry 2 after 3044ms — No connection could be made (localhost:9999)
+  [12:08:51 WRN] Retry 3 after 303ms  — No connection could be made (localhost:9999)
+
+After 3 retries exhausted, the circuit breaker counted enough failures
+(FailureRatio ≥ 50%, MinimumThroughput = 3 met) and tripped open.
+
+  Retry screenshots:
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry1.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry2.png
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/retry3.png
+
+CIRCUIT BREAKER OPEN — TESTED
+-------------------------------
+After MinimumThroughput (3) requests with FailureRatio ≥ 50%:
+
+  [11:24:36 ERR] Circuit breaker opened for 15s
+
+All subsequent requests were rejected instantly without touching the network:
+
+  [12:08:51 INF] Execution Time: 1.5002ms — BrokenCircuitException: The circuit is now open
+  [11:24:37 INF] Execution Time: 0.044ms  — BrokenCircuitException: The circuit is now open
+
+Compare: real TCP attempt = ~4100ms. Open circuit rejection = 0.044ms.
+That is a 100,000x difference — the circuit stops wasting time on a dead service.
+
+  Circuit open screenshot:
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/circuit-opened.png
+  Instant rejection screenshot:
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/instant-rejection.png
+
+HALF-OPEN RECOVERY — TESTED
+-----------------------------
+After the 15s BreakDuration elapsed, Polly transitioned the circuit to Half-Open
+and allowed one probe request through. The mock server on port 9999 responded 200
+— circuit closed immediately:
+
+  [12:45:21 WRN] Polly Resilience event occurred. EventName: 'OnCircuitHalfOpened',
+                 Source: 'external-quotes-default//CircuitBreaker'
+  [12:45:21 INF] Sending HTTP request GET http://localhost:9999/api/random
+  [12:45:21 INF] Received HTTP response headers after 25.434ms — 200
+  [12:45:21 INF] Polly Resilience event occurred. EventName: 'OnCircuitClosed',
+                 Source: 'external-quotes-default//CircuitBreaker', Result: '200'
+  [12:45:21 INF] Execution attempt. Result: '200', Handled: 'False',
+                 Attempt: '0', Execution Time: 38.5339ms
+  [12:45:21 INF] End processing HTTP request after 42.9187ms — 200
+
+Full state machine proved: Closed → Open → Half-Open → Closed.
+One successful probe was enough for Polly to fully close the circuit and
+resume normal traffic.
+
+  Half-open screenshot: https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/circuit-half-open.png
+  Circuit closed screenshot:https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/blob/day22/Screenshots/day22/Piece1-%20PollyRessilence/oncircuitclosed.png
+
+  CI run:
+  https://github.com/thinkbridge-thinkschool/Taneem_thinkschoolDay1/actions/runs/27404335042/job/80989591418

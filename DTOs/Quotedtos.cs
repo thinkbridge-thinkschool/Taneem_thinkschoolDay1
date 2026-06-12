@@ -17,3 +17,12 @@ public record QuoteResponse(
     string Author,
     string Text
 );
+
+// Detail response — includes canDelete computed server-side from ownership/role.
+// Frontend never decides who can delete; it just reads this flag.
+public record QuoteDetailResponse(
+    int    Id,
+    string Author,
+    string Text,
+    bool   CanDelete
+);

@@ -10,10 +10,11 @@ public class AppDbContext : DbContext
     {
     }
 
-    public DbSet<Quote>      Quotes      => Set<Quote>();
-    public DbSet<Collection> Collections => Set<Collection>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Quote>          Quotes         => Set<Quote>();
+    public DbSet<Collection>     Collections    => Set<Collection>();
+    public DbSet<User>           Users          => Set<User>();
+    public DbSet<RefreshToken>   RefreshTokens  => Set<RefreshToken>();
+    public DbSet<OutboxMessage>  OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
